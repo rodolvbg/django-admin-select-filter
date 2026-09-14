@@ -51,6 +51,9 @@ class Select2FilterOptionsView(View):
                 and filter_class.parameter_name == parameter_name
             ):
                 return filter_class(
-                    request, request.GET.dict(), model_admin.model, model_admin
+                    request,
+                    dict(request.GET.lists()),
+                    model_admin.model,
+                    model_admin,
                 )
         raise Http404

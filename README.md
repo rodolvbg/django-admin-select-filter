@@ -78,3 +78,13 @@ since `django-stubs` needs the package importable to resolve model/queryset
 types — with uv, `uv run pre-commit run --all-files` picks up `.venv/bin`
 automatically; without it, activate the venv first (or prefix commands with
 its `bin/`).
+
+### Coverage
+
+`pytest` always runs with coverage on (`--cov`, see `[tool.pytest]` /
+`[tool.coverage]` in `pyproject.toml`) and prints a terminal report. For the
+bundled JS:
+
+```bash
+npm run coverage:js
+```
