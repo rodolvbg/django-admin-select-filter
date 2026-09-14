@@ -34,6 +34,9 @@ class ForeignKeyFilter(AdminSelectFilterMixin, SimpleListFilter):
     ``async_call``
         When true, defer loading options until Select2 requests them through
         the API. It defaults to false.
+    ``autocomplete``
+        When true, disable the browser's native autocomplete suggestions on
+        Select2's search input. It defaults to true.
     ``nullable``
         Controls whether the ``-`` option is available. When left as ``None``,
         the value is inferred from the configured model field.
@@ -51,6 +54,7 @@ class ForeignKeyFilter(AdminSelectFilterMixin, SimpleListFilter):
     only: ClassVar[list[str]] = []
     filter_only_used_values: ClassVar[bool] = True
     async_call: ClassVar[bool] = False
+    autocomplete: ClassVar[bool] = True
     nullable: bool | None = None
     all_value: ClassVar[str] = "__all__"
     null_value: ClassVar[str] = "__null__"

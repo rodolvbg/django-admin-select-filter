@@ -30,7 +30,10 @@ def test_sync_filter_navigates_and_filters_results(
     _login(page, live_server, django_user_model)
     page.goto(f"{live_server.url}/e2e-admin/testapp/book/")
 
-    page.locator("select.admin-select2-filter + span .select2-selection").click()
+    page.locator("select.django-admin-select-filter + span .select2-selection").click()
+    expect(page.locator(".select2-search__field")).to_have_attribute(
+        "autocomplete", "off"
+    )
     page.get_by_role("option", name="Rowling").click()
 
     expect(page).to_have_url(re.compile(r"author="))
@@ -50,7 +53,9 @@ def test_async_filter_loads_options_over_ajax_and_filters(
     _login(page, live_server, django_user_model)
     page.goto(f"{live_server.url}/admin/testapp/book/")
 
-    async_select = page.locator('select.admin-select2-filter[data-async-call="true"]')
+    async_select = page.locator(
+        'select.django-admin-select-filter[data-async-call="true"]'
+    )
     async_select.locator("xpath=following-sibling::span[1]").locator(
         ".select2-selection"
     ).click()

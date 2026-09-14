@@ -9,7 +9,7 @@ function loadScript(source) {
 }
 
 async function initializeFilters() {
-	const filters = document.querySelectorAll(".admin-select2-filter");
+	const filters = document.querySelectorAll(".django-admin-select-filter");
 	if (!filters.length) return;
 
 	const assets = filters[0].dataset;
@@ -51,6 +51,13 @@ async function initializeFilters() {
 			};
 		}
 		select.select2(options);
+		if (element.dataset.autocomplete === "true") {
+			select.on("select2:open", () => {
+				document
+					.querySelector(".select2-container--open .select2-search__field")
+					?.setAttribute("autocomplete", "off");
+			});
+		}
 		select.on("select2:select", (event) => {
 			if (element.dataset.asyncCall === "true" && !event.params.data.element) {
 				const url = new URL(window.location.href);

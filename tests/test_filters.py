@@ -85,8 +85,9 @@ def test_template_renders_select2_markup():
         request=request,
     )
 
-    assert 'class="admin-select2-filter"' in html
+    assert 'class="django-admin-select-filter"' in html
     assert 'data-parameter-name="author"' in html
+    assert 'data-autocomplete="true"' in html
     assert "Rowling" in html
 
 

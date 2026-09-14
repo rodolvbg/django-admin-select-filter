@@ -5,13 +5,14 @@
 <ul>
   <li>
     <select
-      class="admin-select2-filter"
+      class="django-admin-select-filter"
       aria-label="{{ title }}"
       data-placeholder="{% translate 'Search' %}"
       data-jquery-url="{% static 'admin/js/vendor/jquery/jquery.min.js' %}"
       data-jquery-init-url="{% static 'admin/js/jquery.init.js' %}"
       data-select2-url="{% static 'admin/js/vendor/select2/select2.full.js' %}"
       data-async-call="{{ spec.async_call|yesno:'true,false' }}"
+      data-autocomplete="{{ spec.autocomplete|yesno:'true,false' }}"
       data-api-url="{% url 'admin_select_filter:options' %}"
       data-app-label="{{ spec.admin_app_label }}"
       data-model-name="{{ spec.admin_model_name }}"
