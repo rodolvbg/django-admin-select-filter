@@ -2,6 +2,8 @@
 
 Select2-powered admin list filters for Django.
 
+<!-- TODO: screenshot — the Select2 dropdown replacing a default admin list filter -->
+
 ## Install
 
 ```bash
@@ -17,9 +19,139 @@ INSTALLED_APPS = [
 ]
 ```
 
-Wire the options endpoint (only needed for filters using `async_call = True`)
-by dropping `django_admin_select_filter_path()` into your root `urlpatterns`
-— no `include()` needed:
+## Usage
+
+### `ChoiceFilter`
+
+The main filter: it works on any field with discrete values — a
+`choices`-backed `CharField`/`IntegerField`, a `BooleanField`, or an explicit
+`options` list you provide yourself:
+
+```python
+from django.contrib import admin
+from django_admin_select_filter import ChoiceFilter
+
+from myapp.models import Book
+
+
+class GenreFilter(ChoiceFilter):
+    parameter_name = "genre"  # reads Book.genre.choices
+
+
+class StatusFilter(ChoiceFilter):
+    parameter_name = "status"
+    options = [("draft", "Draft"), ("published", "Published")]
+
+
+@admin.register(Book)
+class BookAdmin(admin.ModelAdmin):
+    list_filter = [GenreFilter, StatusFilter]
+```
+
+<!-- TODO: screenshot — ChoiceFilter dropdown in the admin sidebar -->
+
+Since `options` accepts any explicit `(value, label)` list, `ChoiceFilter`
+can even filter a `ForeignKey` — pass one pair per related row:
+
+```python
+class AuthorChoiceFilter(ChoiceFilter):
+    parameter_name = "author"
+    options = [(author.pk, str(author)) for author in Author.objects.all()]
+```
+
+This isn't optimal, though: `options` is evaluated once, when the class body
+runs (at import time), so it goes stale as rows are added or renamed —
+there's no live query, search, or async loading behind it. For a real
+`ForeignKey`, use `ForeignKeyFilter` below instead.
+
+### `ForeignKeyFilter`
+
+Built specifically for `ForeignKey`/`ManyToManyField`s: it queries the
+related model live, supports searching through the related model's own
+`ModelAdmin.search_fields`, and can defer loading options until the widget
+is opened (see `async_call` further down).
+
+```python
+from django_admin_select_filter import ForeignKeyFilter
+
+
+class AuthorFilter(ForeignKeyFilter):
+    parameter_name = "author"
+    ordering = ["name"]
+
+
+@admin.register(Book)
+class BookAdmin(admin.ModelAdmin):
+    list_filter = [AuthorFilter]
+```
+
+<!-- TODO: screenshot — ForeignKeyFilter dropdown with a search box -->
+
+`model` is only needed when it can't be inferred. By default it's resolved by
+walking `parameter_name` across `Book`'s relations, following a nested lookup
+(e.g. `parameter_name = "author__country"`) segment by segment — forward or
+reverse — and taking the last segment's related model. Set `model` explicitly
+if the lookup isn't a real relation chain, or to point somewhere else.
+
+### `field_list_filter()`
+
+For a one-off filter that doesn't need its own subclass, use Django's own
+`list_filter` shorthand — a `(field_name, filter_class)` tuple — via
+`field_list_filter()`:
+
+```python
+from django_admin_select_filter import ChoiceFilter, ForeignKeyFilter, field_list_filter
+
+
+@admin.register(Book)
+class BookAdmin(admin.ModelAdmin):
+    list_filter = [
+        ("author", field_list_filter(ForeignKeyFilter)),
+        ("genre", field_list_filter(ChoiceFilter)),
+    ]
+```
+
+`parameter_name` (and, for `ForeignKeyFilter`, `model`) is inferred from the
+field automatically — including a nested lookup like `"author__country"` —
+so the same wrapped class can be reused across as many fields as you like.
+It only supports `async_call = False`; for an `async_call` filter, define a
+dedicated subclass instead (`field_list_filter()` raises `TypeError` right
+away if you pass it one, rather than fail silently later).
+
+### Shared options
+
+Both filters share the same options: `filter_only_used_values`, `async_call`,
+`searchable`, `nullable` and `title`. Both also support a nested lookup for
+`parameter_name` (e.g. `"author__status"`), resolving the field — and, for
+`ForeignKeyFilter`, the `model` — by walking each `__`-separated relation in
+turn, forward or reverse.
+
+Set `searchable = False` to hide the search input entirely and get a plain
+dropdown instead — best for a short, static option list.
+
+Set `multiple = True` to let either filter accept several values at once:
+
+```python
+class AuthorFilter(ForeignKeyFilter):
+    parameter_name = "author"
+    multiple = True
+```
+
+<!-- TODO: screenshot — multiple = True showing several selected chips -->
+
+Selected values are joined in the query string with `multiple_separator`
+(`","` by default) and applied with an `__in` lookup, so configured values
+(primary keys, option values) must not contain that character. The "All"
+option is dropped in this mode — clearing every selected chip already means
+no filter.
+
+## Async options (`async_call = True`)
+
+Set `async_call = True` on a filter to defer loading its options until the
+Select2 widget is opened, fetching them over AJAX instead of rendering every
+option upfront — useful for a related model with many rows. It requires
+wiring an options endpoint: drop `django_admin_select_filter_path()` into
+your root `urlpatterns` — no `include()` needed:
 
 ```python
 # urls.py
@@ -90,145 +222,7 @@ trade-off: it calls `get_list_filter(request=None)` while building the
 cache, so a `get_list_filter()` override that depends on the request isn't
 supported in this mode.
 
-## Usage
+## Contributing
 
-```python
-from django.contrib import admin
-from django_admin_select_filter import ForeignKeyFilter
-
-from myapp.models import Book
-
-
-class AuthorFilter(ForeignKeyFilter):
-    parameter_name = "author"
-    ordering = ["name"]
-
-
-@admin.register(Book)
-class BookAdmin(admin.ModelAdmin):
-    list_filter = [AuthorFilter]
-```
-
-`model` is only needed when it can't be inferred. By default it's resolved by
-walking `parameter_name` across `Book`'s relations, following a nested lookup
-(e.g. `parameter_name = "author__country"`) segment by segment — forward or
-reverse — and taking the last segment's related model. Set `model` explicitly
-if the lookup isn't a real relation chain, or to point somewhere else.
-
-For a field that isn't a relation — a `choices`-backed `CharField`/`IntegerField`,
-a `BooleanField`, or anything else with discrete values — use `ChoiceFilter`
-instead. It reads its options from the field's `choices` by default, or from an
-explicit `options` list:
-
-```python
-from django_admin_select_filter import ChoiceFilter
-
-
-class GenreFilter(ChoiceFilter):
-    parameter_name = "genre"  # reads Book.genre.choices
-
-
-class StatusFilter(ChoiceFilter):
-    parameter_name = "status"
-    options = [("draft", "Draft"), ("published", "Published")]
-
-
-@admin.register(Book)
-class BookAdmin(admin.ModelAdmin):
-    list_filter = [AuthorFilter, GenreFilter]
-```
-
-For a one-off filter that doesn't need its own subclass, use Django's own
-`list_filter` shorthand — a `(field_name, filter_class)` tuple — via
-`field_list_filter()`:
-
-```python
-from django_admin_select_filter import ForeignKeyFilter, field_list_filter
-
-
-@admin.register(Book)
-class BookAdmin(admin.ModelAdmin):
-    list_filter = [
-        ("author", field_list_filter(ForeignKeyFilter)),
-        ("genre", field_list_filter(ChoiceFilter)),
-    ]
-```
-
-`parameter_name` (and, for `ForeignKeyFilter`, `model`) is inferred from the
-field automatically — including a nested lookup like `"author__country"` —
-so the same wrapped class can be reused across as many fields as you like.
-It only supports `async_call = False`; for an `async_call` filter, define a
-dedicated subclass instead (`field_list_filter()` raises `TypeError` right
-away if you pass it one, rather than fail silently later).
-
-Both filters share the same options: `filter_only_used_values`, `async_call`,
-`searchable`, `nullable` and `title`. Both also support a nested lookup for
-`parameter_name` (e.g. `"author__status"`), resolving the field — and, for
-`ForeignKeyFilter`, the `model` — by walking each `__`-separated relation in
-turn, forward or reverse.
-
-Set `searchable = False` to hide the search input entirely and get a plain
-dropdown instead — best for a short, static option list.
-
-Set `multiple = True` to let either filter accept several values at once:
-
-```python
-class AuthorFilter(ForeignKeyFilter):
-    parameter_name = "author"
-    multiple = True
-```
-
-Selected values are joined in the query string with `multiple_separator`
-(`","` by default) and applied with an `__in` lookup, so configured values
-(primary keys, option values) must not contain that character. The "All"
-option is dropped in this mode — clearing every selected chip already means
-no filter.
-
-## Development
-
-With [uv](https://docs.astral.sh/uv/) (recommended):
-
-```bash
-uv sync
-uv run playwright install --with-deps chromium
-npm install
-uv run pytest
-uv run pre-commit install
-```
-
-`uv sync`/`uv run` install the `dev` and `test` dependency groups by default
-(`[tool.uv] default-groups` in `pyproject.toml`) — no `--extra` flags needed.
-
-Without uv:
-
-```bash
-pip install -e ".[test,dev]"
-playwright install --with-deps chromium
-npm install
-pytest
-pre-commit install
-```
-
-`tests/e2e/` drives a real Django admin page in a headless browser
-(pytest-playwright) to check the Select2 widget actually renders and works —
-both the synchronous dropdown and the asynchronous one, which exercises the
-JS → `fetch` → view → DB round trip for real. It needs a browser installed
-once via `playwright install`.
-
-`pre-commit` runs ruff, mypy, django-upgrade, djade (template linting),
-pyproject-fmt, biome and vitest (for the bundled JS/CSS). The `mypy` hook
-runs against the project's own environment rather than an isolated one,
-since `django-stubs` needs the package importable to resolve model/queryset
-types — with uv, `uv run pre-commit run --all-files` picks up `.venv/bin`
-automatically; without it, activate the venv first (or prefix commands with
-its `bin/`).
-
-### Coverage
-
-`pytest` always runs with coverage on (`--cov`, see `[tool.pytest]` /
-`[tool.coverage]` in `pyproject.toml`) and prints a terminal report. For the
-bundled JS:
-
-```bash
-npm run coverage:js
-```
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, running the
+test suite (including the browser-driven e2e tests), and pre-commit hooks.
