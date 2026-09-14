@@ -1,5 +1,6 @@
 import pytest
 from django.contrib import admin
+from django.db import transaction
 from django.template.loader import render_to_string
 from django.test import RequestFactory, TestCase
 
@@ -322,10 +323,181 @@ class BaseSelectFilterTests(TestCase):
             filter_instance.get_async_options(RequestFactory().get("/api/"), "")
 
 
-class ForeignKeyFilterTests:
+class ForeignKeyFilterTests(TestCase):
     def _build_filter(self, request, params=None):
         model_admin = admin.site._registry[Book]
         return AuthorFilter(request, params or {}, Book, model_admin)
+
+    def test__resolve_model(self):
+        with self.subTest("no parameter_name"):
+            filter_instance = ForeignKeyFilter.__new__(ForeignKeyFilter)
+            filter_instance.parameter_name = None
+            assert filter_instance._resolve_model(Book) is None
+
+        with self.subTest("unknown field"):
+            filter_instance = ForeignKeyFilter.__new__(ForeignKeyFilter)
+            filter_instance.parameter_name = "does_not_exist"
+            assert filter_instance._resolve_model(Book) is None
+
+        with self.subTest("plain relation field"):
+            filter_instance = ForeignKeyFilter.__new__(ForeignKeyFilter)
+            filter_instance.parameter_name = "author"
+            assert filter_instance._resolve_model(Book) is Author
+
+        with self.subTest("nested relation chain"):
+            filter_instance = ForeignKeyFilter.__new__(ForeignKeyFilter)
+            filter_instance.parameter_name = "author__country"
+            assert filter_instance._resolve_model(Book) is Country
+
+        with self.subTest("final segment isn't a relation"):
+            filter_instance = ForeignKeyFilter.__new__(ForeignKeyFilter)
+            filter_instance.parameter_name = "title"
+            assert filter_instance._resolve_model(Book) is None
+
+    def test_get_options(self):
+        # Each subTest wraps its writes in a rolled-back savepoint so that
+        # authors/books created by one scenario don't leak into the next,
+        # since subTests share the surrounding test method's transaction.
+        with self.subTest("only used values by default"), transaction.atomic():
+            used = Author.objects.create(name="Used")
+            Author.objects.create(name="Unused")
+            Book.objects.create(title="A Book", author=used)
+            request = RequestFactory().get("/admin/tests/book/")
+            filter_instance = self._build_filter(request)
+            assert list(filter_instance.get_options()) == [used]
+            transaction.set_rollback(True)
+
+        with (
+            self.subTest("all values when filter_only_used_values is False"),
+            transaction.atomic(),
+        ):
+            unused = Author.objects.create(name="Unused")
+            request = RequestFactory().get("/admin/")
+            filter_instance = AllNullableAuthorFilter(
+                request, {}, Book, admin.site._registry[Book]
+            )
+            assert list(filter_instance.get_options()) == [unused]
+            transaction.set_rollback(True)
+
+        with self.subTest("respects only fields"), transaction.atomic():
+            author = Author.objects.create(name="Solo")
+            Book.objects.create(title="Book", author=author)
+            request = RequestFactory().get("/admin/")
+            filter_instance = OnlyNameAuthorFilter(
+                request, {}, Book, admin.site._registry[Book]
+            )
+            assert list(filter_instance.get_options()) == [author]
+            transaction.set_rollback(True)
+
+        with self.subTest("searches related admin"), transaction.atomic():
+            match = Author.objects.create(name="Rowling")
+            Author.objects.create(name="Tolkien")
+            Book.objects.create(title="HP", author=match)
+            Book.objects.create(title="LOTR", author=Author.objects.get(name="Tolkien"))
+            request = RequestFactory().get("/admin/")
+            filter_instance = self._build_filter(request)
+            assert list(filter_instance.get_options(q="Rowl")) == [match]
+            transaction.set_rollback(True)
+
+        with (
+            self.subTest("deduplicates when related admin reports duplicates"),
+            transaction.atomic(),
+        ):
+            author = Author.objects.create(name="Rowling")
+            Book.objects.create(title="HP", author=author)
+            related_admin = admin.site._registry[Author]
+            original_get_search_results = related_admin.get_search_results
+            related_admin.get_search_results = lambda request, queryset, term: (
+                queryset,
+                True,
+            )
+            try:
+                request = RequestFactory().get("/admin/")
+                filter_instance = self._build_filter(request)
+                assert list(filter_instance.get_options(q="anything")) == [author]
+            finally:
+                related_admin.get_search_results = original_get_search_results
+            transaction.set_rollback(True)
+
+    def test_get_async_options(self):
+        with self.subTest("lists all and selected"):
+            author = Author.objects.create(name="Rowling")
+            Book.objects.create(title="HP", author=author)
+            request = RequestFactory().get("/admin/")
+            filter_instance = self._build_filter(request)
+            options = filter_instance.get_async_options(
+                RequestFactory().get("/api/"), ""
+            )
+            assert options == [
+                (filter_instance.all_value, "All"),
+                (str(author.pk), "Rowling"),
+            ]
+
+        with self.subTest("includes null value"):
+            request = RequestFactory().get("/admin/")
+            filter_instance = AllNullableAuthorFilter(
+                request, {}, Book, admin.site._registry[Book]
+            )
+            options = filter_instance.get_async_options(
+                RequestFactory().get("/api/"), ""
+            )
+            assert options[-1] == (filter_instance.null_value, "-")
+
+        with self.subTest("applies facet counts"):
+            author = Author.objects.create(name="Rowling")
+            Book.objects.create(title="HP", author=author)
+            Book.objects.create(title="Orphan", author=None)
+            request = RequestFactory().get("/admin/")
+            filter_instance = AllNullableAuthorFilter(
+                request, {}, Book, admin.site._registry[Book]
+            )
+            options = filter_instance.get_async_options(
+                RequestFactory().get("/api/", {"facets": "true"}), ""
+            )
+            assert options[0] == (filter_instance.all_value, "All")
+            assert (str(author.pk), "Rowling (1)") in options
+            assert (filter_instance.null_value, "- (1)") in options
+
+    def test_lookups(self):
+        with self.subTest("sync mode returns available options"):
+            author = Author.objects.create(name="Rowling")
+            Book.objects.create(title="HP", author=author)
+            request = RequestFactory().get("/admin/tests/book/")
+            filter_instance = self._build_filter(request)
+            assert filter_instance.lookups(request, admin.site._registry[Book]) == [
+                (str(author.pk), "Rowling")
+            ]
+
+        with self.subTest("sync mode appends the null option when present"):
+            Book.objects.create(title="Orphan", author=None)
+            request = RequestFactory().get("/admin/tests/book/")
+            filter_instance = AllNullableAuthorFilter(
+                request, {}, Book, admin.site._registry[Book]
+            )
+            options = filter_instance.lookups(request, admin.site._registry[Book])
+            assert options[-1] == (filter_instance.null_value, "-")
+
+        with self.subTest("async mode without selection returns empty"):
+            request = RequestFactory().get("/admin/tests/book/")
+            filter_instance = AsyncAuthorFilter(
+                request, {}, Book, admin.site._registry[Book]
+            )
+            assert filter_instance.lookups(request, admin.site._registry[Book]) == []
+
+        with self.subTest("async mode with selection returns the selected instance"):
+            author = Author.objects.create(name="Tolkien")
+            request = RequestFactory().get(
+                "/admin/tests/book/", {"author": str(author.pk)}
+            )
+            filter_instance = AsyncAuthorFilter(
+                request,
+                {"author": [str(author.pk)]},
+                Book,
+                admin.site._registry[Book],
+            )
+            assert filter_instance.lookups(request, admin.site._registry[Book]) == [
+                (str(author.pk), "Tolkien")
+            ]
 
     def test_queryset_filters_by_selected_author(self):
         factory = RequestFactory()
@@ -340,17 +512,6 @@ class ForeignKeyFilterTests:
         result = filter_instance.queryset(request, Book.objects.all())
 
         assert list(result.values_list("title", flat=True)) == ["Harry Potter"]
-
-    def test_get_options_only_returns_used_authors(self):
-        factory = RequestFactory()
-        used = Author.objects.create(name="Used")
-        Author.objects.create(name="Unused")
-        Book.objects.create(title="A Book", author=used)
-
-        request = factory.get("/admin/tests/book/")
-        filter_instance = self._build_filter(request)
-
-        assert list(filter_instance.get_options()) == [used]
 
     def test_null_option_present_when_null_books_exist(self):
         factory = RequestFactory()
@@ -476,97 +637,6 @@ class ForeignKeyFilterTests:
 
         assert filter_instance.has_null_option is True
 
-    def test_get_options_without_used_filter_returns_all_authors(self):
-        unused = Author.objects.create(name="Unused")
-
-        request = RequestFactory().get("/admin/")
-        filter_instance = AllNullableAuthorFilter(
-            request, {}, Book, admin.site._registry[Book]
-        )
-
-        assert list(filter_instance.get_options()) == [unused]
-
-    def test_get_options_respects_only_fields(self):
-        author = Author.objects.create(name="Solo")
-        Book.objects.create(title="Book", author=author)
-
-        request = RequestFactory().get("/admin/")
-        filter_instance = OnlyNameAuthorFilter(
-            request, {}, Book, admin.site._registry[Book]
-        )
-
-        assert list(filter_instance.get_options()) == [author]
-
-    def test_get_options_searches_related_admin(self):
-        match = Author.objects.create(name="Rowling")
-        Author.objects.create(name="Tolkien")
-        Book.objects.create(title="HP", author=match)
-        Book.objects.create(title="LOTR", author=Author.objects.get(name="Tolkien"))
-
-        request = RequestFactory().get("/admin/")
-        filter_instance = self._build_filter(request)
-
-        assert list(filter_instance.get_options(q="Rowl")) == [match]
-
-    def test_get_options_deduplicates_when_related_admin_reports_duplicates(
-        self, monkeypatch
-    ):
-        author = Author.objects.create(name="Rowling")
-        Book.objects.create(title="HP", author=author)
-        related_admin = admin.site._registry[Author]
-        monkeypatch.setattr(
-            related_admin,
-            "get_search_results",
-            lambda request, queryset, term: (queryset, True),
-        )
-
-        request = RequestFactory().get("/admin/")
-        filter_instance = self._build_filter(request)
-
-        assert list(filter_instance.get_options(q="anything")) == [author]
-
-    def test_get_async_options_lists_all_and_selected(self):
-        author = Author.objects.create(name="Rowling")
-        Book.objects.create(title="HP", author=author)
-
-        request = RequestFactory().get("/admin/")
-        filter_instance = self._build_filter(request)
-
-        options = filter_instance.get_async_options(RequestFactory().get("/api/"), "")
-
-        assert options == [
-            (filter_instance.all_value, "All"),
-            (str(author.pk), "Rowling"),
-        ]
-
-    def test_get_async_options_includes_null_value(self):
-        request = RequestFactory().get("/admin/")
-        filter_instance = AllNullableAuthorFilter(
-            request, {}, Book, admin.site._registry[Book]
-        )
-
-        options = filter_instance.get_async_options(RequestFactory().get("/api/"), "")
-
-        assert options[-1] == (filter_instance.null_value, "-")
-
-    def test_get_async_options_applies_facet_counts(self):
-        author = Author.objects.create(name="Rowling")
-        Book.objects.create(title="HP", author=author)
-        Book.objects.create(title="Orphan", author=None)
-
-        request = RequestFactory().get("/admin/")
-        filter_instance = AllNullableAuthorFilter(
-            request, {}, Book, admin.site._registry[Book]
-        )
-
-        options = filter_instance.get_async_options(
-            RequestFactory().get("/api/", {"facets": "true"}), ""
-        )
-
-        assert options[0] == (filter_instance.all_value, "All")
-        assert (str(author.pk), "Rowling (1)") in options
-        assert (filter_instance.null_value, "- (1)") in options
-
     def test_missing_parameter_name_short_circuits_facet_counts_and_queryset(self):
         filter_instance = ForeignKeyFilter.__new__(ForeignKeyFilter)
         filter_instance.used_parameters = {}
@@ -599,26 +669,6 @@ class ForeignKeyFilterTests:
 
         assert list(result.values_list("title", flat=True)) == ["Orphan"]
 
-    def test_async_lookups_returns_empty_without_selection(self):
-        request = RequestFactory().get("/admin/tests/book/")
-        filter_instance = AsyncAuthorFilter(
-            request, {}, Book, admin.site._registry[Book]
-        )
-
-        assert filter_instance.lookups(request, admin.site._registry[Book]) == []
-
-    def test_async_lookups_returns_selected_instance(self):
-        author = Author.objects.create(name="Rowling")
-
-        request = RequestFactory().get("/admin/tests/book/", {"author": str(author.pk)})
-        filter_instance = AsyncAuthorFilter(
-            request, {"author": [str(author.pk)]}, Book, admin.site._registry[Book]
-        )
-
-        assert filter_instance.lookups(request, admin.site._registry[Book]) == [
-            (str(author.pk), "Rowling")
-        ]
-
     def test_has_output_true_for_async_filter_without_options(self):
         request = RequestFactory().get("/admin/tests/book/")
         filter_instance = AsyncAuthorFilter(
@@ -634,7 +684,7 @@ class ForeignKeyFilterTests:
         assert filter_instance.has_output() is False
 
 
-class ChoiceFilterTests:
+class ChoiceFilterTests(TestCase):
     def _build_filter(self, filter_class, request, params=None):
         model_admin = admin.site._registry[Book]
         return filter_class(request, params or {}, Book, model_admin)
@@ -724,33 +774,6 @@ class ChoiceFilterTests:
 
         assert filter_instance.options == [("fiction", "Fiction"), ("poetry", "Poetry")]
 
-    def test_get_options_only_returns_used_values(self):
-        Book.objects.create(title="Dune", genre="fiction")
-
-        request = RequestFactory().get("/admin/")
-        filter_instance = self._build_filter(GenreFilter, request)
-
-        assert filter_instance.get_options() == [("fiction", "Fiction")]
-
-    def test_get_options_without_used_filter_returns_all(self):
-        request = RequestFactory().get("/admin/")
-        filter_instance = self._build_filter(AllGenresFilter, request)
-
-        assert filter_instance.get_options() == [
-            ("fiction", "Fiction"),
-            ("nonfiction", "Non-fiction"),
-            ("poetry", "Poetry"),
-        ]
-
-    def test_get_options_searches_by_label(self):
-        request = RequestFactory().get("/admin/")
-        filter_instance = self._build_filter(AllGenresFilter, request)
-
-        assert filter_instance.get_options(q="fic") == [
-            ("fiction", "Fiction"),
-            ("nonfiction", "Non-fiction"),
-        ]
-
     def test_queryset_filters_by_selected_genre(self):
         Book.objects.create(title="Dune", genre="fiction")
         Book.objects.create(title="Cosmos", genre="nonfiction")
@@ -764,41 +787,75 @@ class ChoiceFilterTests:
 
         assert list(result.values_list("title", flat=True)) == ["Dune"]
 
-    def test_get_async_options_lists_all_and_selected(self):
-        Book.objects.create(title="Dune", genre="fiction")
+    def test_get_options(self):
+        with self.subTest("only used values by default"):
+            Book.objects.create(title="Dune", genre="fiction")
+            request = RequestFactory().get("/admin/")
+            filter_instance = self._build_filter(GenreFilter, request)
+            assert filter_instance.get_options() == [("fiction", "Fiction")]
 
-        request = RequestFactory().get("/admin/")
-        filter_instance = self._build_filter(GenreFilter, request)
+        with self.subTest("all values when filter_only_used_values is False"):
+            request = RequestFactory().get("/admin/")
+            filter_instance = self._build_filter(AllGenresFilter, request)
+            assert filter_instance.get_options() == [
+                ("fiction", "Fiction"),
+                ("nonfiction", "Non-fiction"),
+                ("poetry", "Poetry"),
+            ]
 
-        options = filter_instance.get_async_options(RequestFactory().get("/api/"), "")
+        with self.subTest("searches by label substring"):
+            request = RequestFactory().get("/admin/")
+            filter_instance = self._build_filter(AllGenresFilter, request)
+            assert filter_instance.get_options(q="fic") == [
+                ("fiction", "Fiction"),
+                ("nonfiction", "Non-fiction"),
+            ]
 
-        assert options == [
-            (filter_instance.all_value, "All"),
-            ("fiction", "Fiction"),
-        ]
+    def test_get_async_options(self):
+        with self.subTest("lists all and selected values"):
+            Book.objects.create(title="Dune", genre="fiction")
+            request = RequestFactory().get("/admin/")
+            filter_instance = self._build_filter(GenreFilter, request)
+            options = filter_instance.get_async_options(
+                RequestFactory().get("/api/"), ""
+            )
+            assert options == [
+                (filter_instance.all_value, "All"),
+                ("fiction", "Fiction"),
+            ]
 
-    def test_sync_lookups_return_used_options(self):
-        Book.objects.create(title="Dune", genre="fiction")
+        with self.subTest("applies facet counts"):
+            Book.objects.create(title="Dune2", genre="fiction")
+            Book.objects.create(title="Cosmos", genre="nonfiction")
+            request = RequestFactory().get("/admin/")
+            filter_instance = self._build_filter(AllGenresFilter, request)
+            options = filter_instance.get_async_options(
+                RequestFactory().get("/api/", {"facets": "true"}), ""
+            )
+            assert options[0] == (filter_instance.all_value, "All")
+            assert ("fiction", "Fiction (2)") in options
+            assert ("nonfiction", "Non-fiction (1)") in options
+            assert ("poetry", "Poetry (0)") in options
 
-        request = RequestFactory().get("/admin/")
-        filter_instance = self._build_filter(GenreFilter, request)
+    def test_lookups(self):
+        with self.subTest("sync mode returns available options"):
+            Book.objects.create(title="Dune", genre="fiction")
+            request = RequestFactory().get("/admin/")
+            filter_instance = self._build_filter(GenreFilter, request)
+            assert filter_instance.lookups(request, admin.site._registry[Book]) == [
+                ("fiction", "Fiction")
+            ]
 
-        assert filter_instance.lookups(request, admin.site._registry[Book]) == [
-            ("fiction", "Fiction")
-        ]
+        with self.subTest("async mode without selection returns empty"):
+            request = RequestFactory().get("/admin/tests/book/")
+            filter_instance = self._build_filter(AsyncGenreFilter, request)
+            assert filter_instance.lookups(request, admin.site._registry[Book]) == []
 
-    def test_async_lookups_returns_empty_without_selection(self):
-        request = RequestFactory().get("/admin/tests/book/")
-        filter_instance = self._build_filter(AsyncGenreFilter, request)
-
-        assert filter_instance.lookups(request, admin.site._registry[Book]) == []
-
-    def test_async_lookups_returns_selected_option(self):
-        request = RequestFactory().get("/admin/tests/book/", {"genre": "fiction"})
-        filter_instance = self._build_filter(
-            AsyncGenreFilter, request, {"genre": ["fiction"]}
-        )
-
-        assert filter_instance.lookups(request, admin.site._registry[Book]) == [
-            ("fiction", "Fiction")
-        ]
+        with self.subTest("async mode with selection returns the selected option"):
+            request = RequestFactory().get("/admin/tests/book/", {"genre": "fiction"})
+            filter_instance = self._build_filter(
+                AsyncGenreFilter, request, {"genre": ["fiction"]}
+            )
+            assert filter_instance.lookups(request, admin.site._registry[Book]) == [
+                ("fiction", "Fiction")
+            ]
