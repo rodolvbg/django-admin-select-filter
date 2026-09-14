@@ -13,7 +13,7 @@ def test_options_requires_all_parameters():
 
     response = client.get(url, {"app_label": "testapp", "model_name": "book"})
 
-    assert response.status_code == 404
+    assert response.status_code == 400
 
 
 def test_options_404_for_unknown_model():
@@ -44,11 +44,22 @@ def test_options_404_for_unregistered_model():
     assert response.status_code == 404
 
 
-def test_options_404_when_no_matching_filter():
+def test_options_403_for_unprivileged_user():
     client = Client()
     url = reverse("admin_select_filter:options")
 
     response = client.get(
+        url,
+        {"app_label": "testapp", "model_name": "book", "parameter_name": "author"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_options_404_when_no_matching_filter(admin_client):
+    url = reverse("admin_select_filter:options")
+
+    response = admin_client.get(
         url,
         {"app_label": "testapp", "model_name": "author", "parameter_name": "x"},
     )
@@ -56,13 +67,27 @@ def test_options_404_when_no_matching_filter():
     assert response.status_code == 404
 
 
-def test_options_returns_select2_results():
-    author = Author.objects.create(name="Rowling")
-    Book.objects.create(title="Harry Potter", author=author)
-    client = Client()
+def test_options_404_for_non_async_filter(admin_client):
     url = reverse("admin_select_filter:options")
 
-    response = client.get(
+    response = admin_client.get(
+        url,
+        {
+            "app_label": "testapp",
+            "model_name": "book",
+            "parameter_name": "not_a_real_field",
+        },
+    )
+
+    assert response.status_code == 404
+
+
+def test_options_returns_select2_results(admin_client):
+    author = Author.objects.create(name="Rowling")
+    Book.objects.create(title="Harry Potter", author=author)
+    url = reverse("admin_select_filter:options")
+
+    response = admin_client.get(
         url,
         {
             "app_label": "testapp",

@@ -31,6 +31,11 @@ The filter template loads jQuery/Select2 from Django admin's bundled vendor
 assets on demand, so no extra JS dependency is required. Make sure
 `django.contrib.staticfiles` is installed and configured.
 
+The endpoint only serves filters with `async_call = True` and requires the
+requesting user to have view permission on the target model (checked via
+`ModelAdmin.has_view_permission`) — anonymous or unprivileged requests get a
+403, and a `parameter_name` matching a non-async filter gets a 404.
+
 ## Usage
 
 ```python
@@ -56,11 +61,14 @@ class BookAdmin(admin.ModelAdmin):
 With [uv](https://docs.astral.sh/uv/) (recommended):
 
 ```bash
-uv sync --extra test --extra dev
+uv sync
 npm install
 uv run pytest
 uv run pre-commit install
 ```
+
+`uv sync`/`uv run` install the `dev` and `test` dependency groups by default
+(`[tool.uv] default-groups` in `pyproject.toml`) — no `--extra` flags needed.
 
 Without uv:
 

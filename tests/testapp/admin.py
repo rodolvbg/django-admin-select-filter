@@ -45,4 +45,4 @@ class AuthorAdmin(admin.ModelAdmin):
 
 @admin.register(Book)
 class BookAdmin(admin.ModelAdmin):
-    list_filter = [MissingFieldFilter, AuthorFilter]
+    list_filter = [MissingFieldFilter, AuthorFilter, AsyncAuthorFilter]
