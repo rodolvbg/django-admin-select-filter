@@ -57,3 +57,9 @@
   from a `{site: {app_label: {model_name: {parameter_name: filter}}}}` map
   built once and cached for the process's lifetime, instead of calling
   `get_list_filter()` on every registered `ModelAdmin` on every request.
+- Added `field_list_filter()`, adapting `ForeignKeyFilter`/`ChoiceFilter` for
+  `list_filter`'s `(field_name, filter_class)` tuple shorthand so the same
+  class can be reused across fields without a dedicated subclass per field —
+  `parameter_name` (and, for `ForeignKeyFilter`, `model`) is inferred from
+  the field. Only supports `async_call = False`; it raises `TypeError`
+  immediately for a filter with `async_call = True`.

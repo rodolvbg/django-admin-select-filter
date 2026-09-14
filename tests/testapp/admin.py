@@ -1,6 +1,10 @@
 from django.contrib import admin
 
-from django_admin_select_filter.filters import ChoiceFilter, ForeignKeyFilter
+from django_admin_select_filter.filters import (
+    ChoiceFilter,
+    ForeignKeyFilter,
+    field_list_filter,
+)
 from tests.testapp.models import Author, Book, Country
 
 
@@ -124,6 +128,10 @@ class BookAdmin(admin.ModelAdmin):
         AsyncAuthorFilter,
         GenreFilter,
         AsyncGenreFilter,
+        # Tuple form: reuses ForeignKeyFilter directly (no dedicated
+        # subclass) via field_list_filter(), on a nested lookup so the
+        # target model (Country) is inferred automatically too.
+        ("author__country", field_list_filter(ForeignKeyFilter)),
     ]
 
 

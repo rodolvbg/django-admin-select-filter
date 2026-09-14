@@ -138,6 +138,29 @@ class BookAdmin(admin.ModelAdmin):
     list_filter = [AuthorFilter, GenreFilter]
 ```
 
+For a one-off filter that doesn't need its own subclass, use Django's own
+`list_filter` shorthand — a `(field_name, filter_class)` tuple — via
+`field_list_filter()`:
+
+```python
+from django_admin_select_filter import ForeignKeyFilter, field_list_filter
+
+
+@admin.register(Book)
+class BookAdmin(admin.ModelAdmin):
+    list_filter = [
+        ("author", field_list_filter(ForeignKeyFilter)),
+        ("genre", field_list_filter(ChoiceFilter)),
+    ]
+```
+
+`parameter_name` (and, for `ForeignKeyFilter`, `model`) is inferred from the
+field automatically — including a nested lookup like `"author__country"` —
+so the same wrapped class can be reused across as many fields as you like.
+It only supports `async_call = False`; for an `async_call` filter, define a
+dedicated subclass instead (`field_list_filter()` raises `TypeError` right
+away if you pass it one, rather than fail silently later).
+
 Both filters share the same options: `filter_only_used_values`, `async_call`,
 `searchable`, `nullable` and `title`. Both also support a nested lookup for
 `parameter_name` (e.g. `"author__status"`), resolving the field — and, for

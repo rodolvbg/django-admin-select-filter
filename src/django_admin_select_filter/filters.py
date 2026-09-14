@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 from collections.abc import Iterator
 from typing import Any, ClassVar
 
@@ -524,3 +525,79 @@ class ChoiceFilter(BaseSelectFilter):
         if self.has_null_option:
             options.append((self.null_value, "-"))
         return options
+
+
+@functools.cache
+def _bind_parameter_name(
+    select_filter_class: type[BaseSelectFilter], parameter_name: str
+) -> type[BaseSelectFilter]:
+    """Return (and cache) a ``select_filter_class`` subclass bound to ``parameter_name``.
+
+    Cached so repeated ``field_list_filter()`` calls for the same
+    ``(class, field)`` pair across requests reuse one dynamic subclass
+    instead of creating a new one every time.
+    """
+    return type(
+        f"{select_filter_class.__name__}[{parameter_name}]",
+        (select_filter_class,),
+        {"parameter_name": parameter_name},
+    )
+
+
+def field_list_filter(
+    select_filter_class: type[BaseSelectFilter],
+) -> Any:
+    """Adapt ``select_filter_class`` for ``list_filter``'s ``(field_name,
+    filter_class)`` tuple shorthand — Django's built-in way to reuse one
+    filter class across several fields without a dedicated ``parameter_name``
+    subclass per field::
+
+        list_filter = [
+            ("author", field_list_filter(ForeignKeyFilter)),
+            ("genre", field_list_filter(ChoiceFilter)),
+        ]
+
+    Plain classes (``AuthorFilter`` set with its own ``parameter_name = "author"``)
+    still work as before and can be mixed freely with this form.
+
+    This can't return ``select_filter_class`` itself: for a tuple entry,
+    Django calls the second element as
+    ``filter_class(field, request, params, model, model_admin, field_path=...)``
+    — a different signature from :class:`BaseSelectFilter`'s
+    ``(request, params, model, model_admin)`` (Django's own
+    ``FieldListFilter`` protocol, which ``BaseSelectFilter`` doesn't
+    implement). This wraps that call instead, deriving ``parameter_name``
+    from ``field_path`` and constructing ``select_filter_class`` normally —
+    it works because Django only actually requires the returned object to
+    support ``choices()``, ``has_output()`` and the other
+    :class:`~django.contrib.admin.filters.SimpleListFilter` methods that
+    :class:`BaseSelectFilter` already provides, not a real ``FieldListFilter``
+    subclass.
+
+    Only supports ``async_call = False``. ``Select2FilterOptionsView`` finds
+    a matching *async* filter by looking for a ``list_filter`` entry whose
+    own ``parameter_name`` equals the requested one — but this factory's
+    ``parameter_name`` isn't fixed; it's only known once Django calls it for
+    a specific field, so there's no single value to match against ahead of
+    time. Use a dedicated subclass for an ``async_call`` filter instead.
+    """
+    if select_filter_class.async_call:
+        raise TypeError(
+            f"field_list_filter() doesn't support async_call filters "
+            f"({select_filter_class.__name__}.async_call is True); use a "
+            "dedicated subclass instead."
+        )
+
+    def factory(
+        field: Any,
+        request: HttpRequest,
+        params: dict[str, Any],
+        model: type[models.Model],
+        model_admin: ModelAdmin[Any],
+        field_path: str | None = None,
+    ) -> BaseSelectFilter:
+        parameter_name = field_path if field_path is not None else field.name
+        bound_class = _bind_parameter_name(select_filter_class, parameter_name)  # type: ignore[arg-type]
+        return bound_class(request, params, model, model_admin)
+
+    return factory
