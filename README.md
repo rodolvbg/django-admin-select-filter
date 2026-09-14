@@ -53,14 +53,28 @@ class BookAdmin(admin.ModelAdmin):
 
 ## Development
 
+With [uv](https://docs.astral.sh/uv/) (recommended):
+
+```bash
+uv sync --extra test --extra dev
+npm install
+uv run pytest
+uv run pre-commit install
+```
+
+Without uv:
+
 ```bash
 pip install -e ".[test,dev]"
+npm install
 pytest
 pre-commit install
 ```
 
 `pre-commit` runs ruff, mypy, django-upgrade, djade (template linting),
-pyproject-fmt and biome (for the bundled JS/CSS). The `mypy` hook runs
-against the same environment (`pip install -e ".[dev]"` must be done first)
-rather than an isolated one, since `django-stubs` needs the package
-importable to resolve model/queryset types.
+pyproject-fmt, biome and vitest (for the bundled JS/CSS). The `mypy` hook
+runs against the project's own environment rather than an isolated one,
+since `django-stubs` needs the package importable to resolve model/queryset
+types — with uv, `uv run pre-commit run --all-files` picks up `.venv/bin`
+automatically; without it, activate the venv first (or prefix commands with
+its `bin/`).
