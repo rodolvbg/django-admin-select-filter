@@ -4,13 +4,17 @@ import functools
 from collections.abc import Iterator
 from typing import Any, ClassVar
 
+import django
 from django.contrib.admin import ModelAdmin
 from django.contrib.admin.filters import SimpleListFilter
 from django.core.exceptions import FieldDoesNotExist
 from django.db import models
+from django.forms import Media
 from django.http import HttpRequest
+from django.templatetags.static import static
 from django.urls import reverse
 from django.utils.functional import cached_property
+from django.utils.safestring import mark_safe
 from django.utils.translation import gettext
 
 # The default ``name`` django_admin_select_filter_path() registers its route
@@ -18,6 +22,29 @@ from django.utils.translation import gettext
 # and urls.py share one source of truth without a circular import — urls.py
 # already depends on views.py, which depends on this module.
 ASYNC_CALL_URL_NAME = "options"
+
+# django.forms.Script (a Media.js entry that can carry extra attributes, such
+# as type="module") only exists from Django 5.2 on. This package supports
+# Django >= 4.2, so older versions fall back to a mark_safe()-wrapped literal
+# <script> tag instead — Media.render_js() has always deferred to
+# path.__html__() when present rather than building the tag itself, so that
+# fallback works uniformly back to 4.2.
+_SUPPORTS_SCRIPT_ATTRS = django.VERSION >= (5, 2)
+
+
+def _module_script(path: str) -> Any:
+    """Render ``path`` as an ES module ``<script>`` tag for use in a ``Media.js`` list.
+
+    Returns ``Any`` rather than a precise type: django-stubs types
+    ``Media.js`` as ``Sequence[str] | None``, not accounting for
+    ``django.forms.Script`` (a non-``str`` ``Media`` asset) even on a Django
+    version that has it.
+    """
+    if _SUPPORTS_SCRIPT_ATTRS:
+        from django.forms import Script
+
+        return Script(path, type="module")
+    return mark_safe(f'<script type="module" src="{static(path)}"></script>')
 
 
 class BaseSelectFilter(SimpleListFilter):
@@ -113,6 +140,36 @@ class BaseSelectFilter(SimpleListFilter):
     def model_admin_queryset(self) -> models.QuerySet[Any]:
         """Return and cache the source ModelAdmin queryset when first needed."""
         return self.model_admin.get_queryset(self.request)
+
+    @property
+    def media(self) -> Media:
+        """Static assets this filter's template needs, based on its own
+        configuration — one JS module per optional capability (``async_call``,
+        non-``searchable``, ``multiple``) — mirroring ``ModelAdmin.media``'s
+        own pattern of a ``@property`` computing a ``Media`` instance from
+        instance state, rather than a static inner ``class Media``.
+
+        Access ``{{ spec.media.css }}``/``{{ spec.media.js }}`` separately in
+        a template (as Django's own admin templates do), since ``Media``
+        resolves ``.css``/``.js`` through ``__getitem__`` rather than a real
+        attribute — plain attribute access isn't available.
+        """
+        js = [_module_script("admin_select_filter/js/core.js")]
+        if self.async_call:
+            js.append(_module_script("admin_select_filter/js/async_options.js"))
+        if not self.searchable:
+            js.append(_module_script("admin_select_filter/js/non_searchable.js"))
+        if self.multiple:
+            js.append(_module_script("admin_select_filter/js/multiple_navigation.js"))
+        return Media(
+            css={
+                "all": [
+                    "admin/css/vendor/select2/select2.css",
+                    "admin_select_filter/css/admin_select2_filter.css",
+                ]
+            },
+            js=js,
+        )
 
     def _is_nullable(self, admin_model: type[models.Model]) -> bool:
         """Determine whether the configured field accepts null values."""

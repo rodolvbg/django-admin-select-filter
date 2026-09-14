@@ -1,6 +1,5 @@
 {% load i18n static %}
-<link rel="stylesheet" href="{% static 'admin/css/vendor/select2/select2.css' %}">
-<link rel="stylesheet" href="{% static 'admin_select_filter/css/admin_select2_filter.css' %}">
+{{ spec.media.css }}
 {% block filter_title %}
   <h3>{% blocktranslate with filter_title=title %} By {{ filter_title }} {% endblocktranslate %}</h3>
 {% endblock filter_title %}
@@ -14,16 +13,20 @@
       data-jquery-url="{% static 'admin/js/vendor/jquery/jquery.min.js' %}"
       data-jquery-init-url="{% static 'admin/js/jquery.init.js' %}"
       data-select2-url="{% static 'admin/js/vendor/select2/select2.full.js' %}"
-      data-async-call="{{ spec.async_call|yesno:'true,false' }}"
-      data-searchable="{{ spec.searchable|yesno:'true,false' }}"
-      data-api-url="{{ spec.async_call_url }}"
-      data-app-label="{{ spec.admin_app_label }}"
-      data-model-name="{{ spec.admin_model_name }}"
       data-parameter-name="{{ spec.parameter_name }}"
-      data-facets="{{ spec.facets|yesno:'true,false' }}"
-      data-all-value="{{ spec.all_value }}"
-      data-multiple="{{ spec.multiple|yesno:'true,false' }}"
-      data-multiple-separator="{{ spec.multiple_separator }}"
+      {% if not spec.searchable %}data-searchable="false"{% endif %}
+      {% if spec.async_call %}
+        data-async-call="true"
+        data-api-url="{{ spec.async_call_url }}"
+        data-app-label="{{ spec.admin_app_label }}"
+        data-model-name="{{ spec.admin_model_name }}"
+        data-facets="{{ spec.facets|yesno:'true,false' }}"
+        data-all-value="{{ spec.all_value }}"
+      {% endif %}
+      {% if spec.multiple %}
+        data-multiple="true"
+        data-multiple-separator="{{ spec.multiple_separator }}"
+      {% endif %}
       {% block select_attrs %}{% endblock %}
     >
       {% block options %}
@@ -42,4 +45,4 @@
     </select>
   </li>
 </ul>
-<script type="module" src="{% static 'admin_select_filter/js/admin_select2_filter.js' %}"></script>
+{{ spec.media.js }}

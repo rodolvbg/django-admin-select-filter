@@ -1,4 +1,5 @@
 import re
+from unittest import mock
 
 import pytest
 from django.contrib import admin
@@ -409,6 +410,77 @@ class BaseSelectFilterTests(TestCase):
             )
             result = filter_instance.queryset(request, all_books)
             self.assertEqual(list(result.values_list("title", flat=True)), ["Orphan"])
+
+    def test_media(self):
+        with self.subTest("css is always the same"):
+            filter_instance = self._build()
+            css_html = str(filter_instance.media["css"])
+            self.assertIn(
+                'href="/static/admin/css/vendor/select2/select2.css"', css_html
+            )
+            self.assertIn(
+                'href="/static/admin_select_filter/css/admin_select2_filter.css"',
+                css_html,
+            )
+
+        with self.subTest("sync, searchable, single: only core.js"):
+            filter_instance = self._build(
+                async_call=False, searchable=True, multiple=False
+            )
+            js_html = str(filter_instance.media["js"])
+            self.assertIn('type="module"', js_html)
+            self.assertIn('src="/static/admin_select_filter/js/core.js"', js_html)
+            self.assertNotIn("async_options.js", js_html)
+            self.assertNotIn("non_searchable.js", js_html)
+            self.assertNotIn("multiple_navigation.js", js_html)
+
+        with self.subTest("async_call adds async_options.js"):
+            filter_instance = self._build(async_call=True)
+            self.assertIn(
+                "admin_select_filter/js/async_options.js",
+                str(filter_instance.media["js"]),
+            )
+
+        with self.subTest("searchable = False adds non_searchable.js"):
+            filter_instance = self._build(searchable=False)
+            self.assertIn(
+                "admin_select_filter/js/non_searchable.js",
+                str(filter_instance.media["js"]),
+            )
+
+        with self.subTest("multiple adds multiple_navigation.js"):
+            filter_instance = self._build(multiple=True)
+            self.assertIn(
+                "admin_select_filter/js/multiple_navigation.js",
+                str(filter_instance.media["js"]),
+            )
+
+        with self.subTest("every capability combined, in a fixed order"):
+            filter_instance = self._build(
+                async_call=True, searchable=False, multiple=True
+            )
+            js_html = str(filter_instance.media["js"])
+            names = [
+                "core.js",
+                "async_options.js",
+                "non_searchable.js",
+                "multiple_navigation.js",
+            ]
+            positions = [js_html.index(name) for name in names]
+            self.assertEqual(positions, sorted(positions))
+            self.assertEqual(js_html.count("<script"), 4)
+
+        with self.subTest("falls back to a literal tag before Django 5.2"):
+            with mock.patch(
+                "django_admin_select_filter.filters._SUPPORTS_SCRIPT_ATTRS", False
+            ):
+                filter_instance = self._build()
+                js_html = str(filter_instance.media["js"])
+            self.assertEqual(
+                js_html,
+                '<script type="module" '
+                'src="/static/admin_select_filter/js/core.js"></script>',
+            )
 
     def test_choices(self):
         with self.subTest("single selection"):
@@ -922,7 +994,7 @@ class ChoiceFilterTests(TestCase):
     def test_template_renders_searchable_data_attribute(self):
         request = RequestFactory().get("/admin/")
 
-        with self.subTest("searchable by default"):
+        with self.subTest("searchable by default: attribute omitted"):
             filter_instance = self._build_filter(GenreFilter, request)
             html = render_to_string(
                 filter_instance.template,
@@ -933,7 +1005,7 @@ class ChoiceFilterTests(TestCase):
                 },
                 request=request,
             )
-            assert 'data-searchable="true"' in html
+            assert "data-searchable" not in html
 
         with self.subTest("searchable disabled"):
             filter_instance = self._build_filter(NonSearchableGenreFilter, request)
