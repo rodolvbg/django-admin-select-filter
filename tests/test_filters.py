@@ -30,6 +30,7 @@ from tests.testapp.admin import (
     MultipleAuthorFilter,
     MultipleGenreFilter,
     NonRelationChainFilter,
+    NonSearchableGenreFilter,
     OnlyNameAuthorFilter,
     UnknownChainFilter,
 )
@@ -884,6 +885,35 @@ class ChoiceFilterTests(TestCase):
         assert 'class="django-admin-select-filter"' in html
         assert 'data-parameter-name="genre"' in html
         assert "Fiction" in html
+
+    def test_template_renders_searchable_data_attribute(self):
+        request = RequestFactory().get("/admin/")
+
+        with self.subTest("searchable by default"):
+            filter_instance = self._build_filter(GenreFilter, request)
+            html = render_to_string(
+                filter_instance.template,
+                {
+                    "spec": filter_instance,
+                    "title": filter_instance.title,
+                    "choices": list(filter_instance.choices(_FakeChangeList())),
+                },
+                request=request,
+            )
+            assert 'data-searchable="true"' in html
+
+        with self.subTest("searchable disabled"):
+            filter_instance = self._build_filter(NonSearchableGenreFilter, request)
+            html = render_to_string(
+                filter_instance.template,
+                {
+                    "spec": filter_instance,
+                    "title": filter_instance.title,
+                    "choices": list(filter_instance.choices(_FakeChangeList())),
+                },
+                request=request,
+            )
+            assert 'data-searchable="false"' in html
 
     def test_explicit_title_skips_default_lookup(self):
         request = RequestFactory().get("/admin/")

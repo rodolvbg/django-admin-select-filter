@@ -51,6 +51,10 @@ class GenreFilter(ChoiceFilter):
     parameter_name = "genre"
 
 
+class NonSearchableGenreFilter(GenreFilter):
+    searchable = False
+
+
 class AsyncGenreFilter(GenreFilter):
     async_call = True
 

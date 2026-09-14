@@ -53,6 +53,20 @@ function addMultipleFilter() {
   `;
 }
 
+function addNonSearchableFilter() {
+	document.body.innerHTML = `
+    <select
+      class="django-admin-select-filter"
+      data-placeholder="Search"
+      data-jquery-url="/jquery.js"
+      data-jquery-init-url="/jquery.init.js"
+      data-select2-url="/select2.js"
+      data-autocomplete="true"
+      data-searchable="false"
+    ></select>
+  `;
+}
+
 function mockLocationAssign() {
 	const assign = vi.fn();
 	const original = window.location;
@@ -109,6 +123,26 @@ describe("admin Select2 filter", () => {
 			width: "100%",
 		});
 		expect(on).toHaveBeenCalledWith("select2:select", expect.any(Function));
+	});
+
+	it("hides the search box when searchable is false", async () => {
+		addNonSearchableFilter();
+		const { select2 } = installDjangoJQuery();
+		await import(modulePath);
+
+		expect(select2).toHaveBeenCalledWith({
+			placeholder: "Search",
+			width: "100%",
+			minimumResultsForSearch: Number.POSITIVE_INFINITY,
+		});
+	});
+
+	it("keeps the search box by default", async () => {
+		addFilter();
+		const { select2 } = installDjangoJQuery();
+		await import(modulePath);
+
+		expect(select2.mock.calls[0][0].minimumResultsForSearch).toBeUndefined();
 	});
 
 	it("loads Select2 temporarily against Django's isolated jQuery", async () => {

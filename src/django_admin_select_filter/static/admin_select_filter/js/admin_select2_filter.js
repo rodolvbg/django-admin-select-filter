@@ -50,6 +50,9 @@ async function initializeFilters() {
 				}),
 			};
 		}
+		if (element.dataset.searchable === "false") {
+			options.minimumResultsForSearch = Infinity;
+		}
 		select.select2(options);
 		if (element.dataset.autocomplete === "true") {
 			select.on("select2:open", () => {
