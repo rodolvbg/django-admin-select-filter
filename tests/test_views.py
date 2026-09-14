@@ -5,6 +5,8 @@ from django.contrib import admin
 from django.contrib.auth.models import AnonymousUser, User
 from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
+from inline_snapshot import snapshot
+from inline_snapshot_django import snapshot_queries
 
 from django_admin_select_filter.views import Select2FilterOptionsView
 from tests.testapp.admin import AsyncAuthorFilter
@@ -18,105 +20,146 @@ class Select2FilterOptionsViewTests:
         client = Client()
         url = reverse("admin_select_filter:options")
 
-        response = client.get(url, {"app_label": "testapp", "model_name": "book"})
+        with snapshot_queries() as queries:
+            response = client.get(url, {"app_label": "testapp", "model_name": "book"})
 
         assert response.status_code == 400
+        assert queries == snapshot([])
 
     def test_options_404_for_unknown_model(self):
         client = Client()
         url = reverse("admin_select_filter:options")
 
-        response = client.get(
-            url,
-            {"app_label": "doesnotexist", "model_name": "nope", "parameter_name": "x"},
-        )
+        with snapshot_queries() as queries:
+            response = client.get(
+                url,
+                {
+                    "app_label": "doesnotexist",
+                    "model_name": "nope",
+                    "parameter_name": "x",
+                },
+            )
 
         assert response.status_code == 404
+        assert queries == snapshot([])
 
     def test_options_404_for_unregistered_model(self):
         client = Client()
         url = reverse("admin_select_filter:options")
 
-        response = client.get(
-            url,
-            {
-                "app_label": "contenttypes",
-                "model_name": "contenttype",
-                "parameter_name": "x",
-            },
-        )
+        with snapshot_queries() as queries:
+            response = client.get(
+                url,
+                {
+                    "app_label": "contenttypes",
+                    "model_name": "contenttype",
+                    "parameter_name": "x",
+                },
+            )
 
         assert response.status_code == 404
+        assert queries == snapshot([])
 
     def test_options_403_for_unprivileged_user(self):
         client = Client()
         url = reverse("admin_select_filter:options")
 
-        response = client.get(
-            url,
-            {"app_label": "testapp", "model_name": "book", "parameter_name": "author"},
-        )
+        with snapshot_queries() as queries:
+            response = client.get(
+                url,
+                {
+                    "app_label": "testapp",
+                    "model_name": "book",
+                    "parameter_name": "author",
+                },
+            )
 
         assert response.status_code == 403
+        assert queries == snapshot([])
 
     def test_options_404_when_no_matching_filter(self, admin_client):
         url = reverse("admin_select_filter:options")
 
-        response = admin_client.get(
-            url,
-            {"app_label": "testapp", "model_name": "author", "parameter_name": "x"},
-        )
+        with snapshot_queries() as queries:
+            response = admin_client.get(
+                url,
+                {"app_label": "testapp", "model_name": "author", "parameter_name": "x"},
+            )
 
         assert response.status_code == 404
+        assert queries == snapshot(
+            [
+                "SELECT ... FROM django_session WHERE ... LIMIT ...",
+                "SELECT ... FROM auth_user WHERE ... LIMIT ...",
+            ]
+        )
 
     def test_options_404_for_non_async_filter(self, admin_client):
         url = reverse("admin_select_filter:options")
 
-        response = admin_client.get(
-            url,
-            {
-                "app_label": "testapp",
-                "model_name": "book",
-                "parameter_name": "not_a_real_field",
-            },
-        )
+        with snapshot_queries() as queries:
+            response = admin_client.get(
+                url,
+                {
+                    "app_label": "testapp",
+                    "model_name": "book",
+                    "parameter_name": "not_a_real_field",
+                },
+            )
 
         assert response.status_code == 404
+        assert queries == snapshot(
+            [
+                "SELECT ... FROM django_session WHERE ... LIMIT ...",
+                "SELECT ... FROM auth_user WHERE ... LIMIT ...",
+            ]
+        )
 
     def test_options_returns_select2_results_for_foreign_key_filter(self, admin_client):
         author = Author.objects.create(name="Rowling")
         Book.objects.create(title="Harry Potter", author=author)
         url = reverse("admin_select_filter:options")
 
-        response = admin_client.get(
-            url,
-            {
-                "app_label": "testapp",
-                "model_name": "book",
-                "parameter_name": "author",
-                "q": "Rowl",
-                "facets": "true",
-            },
-        )
+        with snapshot_queries() as queries:
+            response = admin_client.get(
+                url,
+                {
+                    "app_label": "testapp",
+                    "model_name": "book",
+                    "parameter_name": "author",
+                    "q": "Rowl",
+                    "facets": "true",
+                },
+            )
 
         assert response.status_code == 200
         results = response.json()["results"]
         assert results[0] == {"id": "__all__", "text": "All"}
         assert {"id": str(author.pk), "text": "Rowling (1)"} in results
+        assert queries == snapshot(
+            [
+                "SELECT ... FROM django_session WHERE ... LIMIT ...",
+                "SELECT ... FROM auth_user WHERE ... LIMIT ...",
+                "SELECT ... FROM testapp_author WHERE ... ORDER BY ... ASC",
+                "SELECT ... FROM testapp_book WHERE ... LIMIT ...",
+                "SELECT ... FROM testapp_book GROUP BY ...",
+            ]
+        )
 
     def test_options_returns_select2_results_for_choice_filter(self, admin_client):
         Book.objects.create(title="Dune", genre="fiction")
         url = reverse("admin_select_filter:options")
 
-        response = admin_client.get(
-            url,
-            {
-                "app_label": "testapp",
-                "model_name": "book",
-                "parameter_name": "genre",
-                "q": "Fic",
-            },
-        )
+        with snapshot_queries() as queries:
+            response = admin_client.get(
+                url,
+                {
+                    "app_label": "testapp",
+                    "model_name": "book",
+                    "parameter_name": "genre",
+                    "q": "Fic",
+                },
+            )
 
         assert response.status_code == 200
         results = response.json()["results"]
@@ -124,6 +167,14 @@ class Select2FilterOptionsViewTests:
             {"id": "__all__", "text": "All"},
             {"id": "fiction", "text": "Fiction"},
         ]
+        assert queries == snapshot(
+            [
+                "SELECT ... FROM django_session WHERE ... LIMIT ...",
+                "SELECT ... FROM auth_user WHERE ... LIMIT ...",
+                "SELECT ... FROM testapp_book WHERE ...",
+                "SELECT ... FROM testapp_book WHERE ... LIMIT ...",
+            ]
+        )
 
     def test_options_finds_a_model_registered_only_on_a_custom_admin_site(
         self, admin_client
@@ -134,18 +185,25 @@ class Select2FilterOptionsViewTests:
         Country.objects.create(name="Chile")
         url = reverse("admin_select_filter:options")
 
-        response = admin_client.get(
-            url,
-            {
-                "app_label": "testapp",
-                "model_name": "country",
-                "parameter_name": "name",
-            },
-        )
+        with snapshot_queries() as queries:
+            response = admin_client.get(
+                url,
+                {
+                    "app_label": "testapp",
+                    "model_name": "country",
+                    "parameter_name": "name",
+                },
+            )
 
         assert response.status_code == 200
         results = response.json()["results"]
         assert {"id": "Chile", "text": "Chile"} in results
+        assert queries == snapshot(
+            [
+                "SELECT ... FROM django_session WHERE ... LIMIT ...",
+                "SELECT ... FROM auth_user WHERE ... LIMIT ...",
+            ]
+        )
 
 
 class Select2FilterOptionsViewMethodTests(TestCase):

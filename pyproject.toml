@@ -27,6 +27,8 @@ classifiers = [
 dependencies = [ "django>=4.2" ]
 optional-dependencies.dev = [ "django-stubs>=5", "mypy>=1.11", "pre-commit>=4", "ruff>=0.6" ]
 optional-dependencies.test = [
+  "inline-snapshot>=0.20.10",
+  "inline-snapshot-django>=1.1",
   "playwright>=1.62",
   "pytest>=8",
   "pytest-cov>=5",
@@ -39,6 +41,8 @@ urls.Repository = "https://github.com/rodolvbg/django-admin-select-filter"
 [dependency-groups]
 dev = [ "django-stubs>=5", "mypy>=1.11", "pre-commit>=4", "ruff>=0.6" ]
 test = [
+  "inline-snapshot>=0.20.10",
+  "inline-snapshot-django>=1.1",
   "playwright>=1.62",
   "pytest>=8",
   "pytest-cov>=5",
@@ -105,3 +109,6 @@ run.omit = [ "*/_typecheck_settings.py" ]
 run.source = [ "src/django_admin_select_filter" ]
 report.show_missing = true
 report.skip_covered = true
+
+[tool.inline-snapshot]
+format-command = "ruff format --stdin-filename {filename} -"
