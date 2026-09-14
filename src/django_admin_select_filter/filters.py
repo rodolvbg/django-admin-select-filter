@@ -256,13 +256,40 @@ class BaseSelectFilter(SimpleListFilter):
             selected = not selected_values if index == 0 else key in selected_values
             yield {**choice, "key": key, "selected": selected}
 
+    def _option_items(
+        self,
+        request: HttpRequest | None = None,
+        q: str = "",
+    ) -> list[tuple[str, str]]:
+        """Return every available option as ``(key, label)`` string pairs."""
+        raise NotImplementedError
+
+    def _selected_option_items(self) -> list[tuple[str, str]]:
+        """Return only the currently selected options, as ``(key, label)`` pairs."""
+        raise NotImplementedError
+
     def get_async_options(
         self,
         request: HttpRequest,
         q: str,
     ) -> list[tuple[str, str]]:
         """Return Select2 options for an API request and its search term."""
-        raise NotImplementedError
+        return self._build_async_options(
+            request, self._option_items(request=request, q=q)
+        )
+
+    def lookups(
+        self,
+        request: HttpRequest,
+        model_admin: ModelAdmin[Any],
+    ) -> list[tuple[str, str]]:
+        """Return choices rendered initially by Django's list-filter template."""
+        options = (
+            self._selected_option_items() if self.async_call else self._option_items()
+        )
+        if self.has_null_option:
+            options.append((self.null_value, "-"))
+        return options
 
 
 class ForeignKeyFilter(BaseSelectFilter):
@@ -363,52 +390,29 @@ class ForeignKeyFilter(BaseSelectFilter):
                 queryset = queryset.distinct()
         return queryset
 
-    def get_async_options(
+    def _option_items(
         self,
-        request: HttpRequest,
-        q: str,
+        request: HttpRequest | None = None,
+        q: str = "",
     ) -> list[tuple[str, str]]:
-        """Return Select2 options for an API request and its search term.
-
-        ``self.request`` is the admin changelist request used to construct the
-        filter. ``request`` is the separate API-view request that asks for the
-        asynchronous options, and ``q`` is the search term sent by that view.
-        :param request: The API-view request asking for asynchronous options.
-        :param q: The search term sent by the API-view request.
-        :return: A list of tuples representing the Select2 options.
-        """
-        items = [
+        """Return every available option as ``(key, label)`` string pairs."""
+        return [
             (str(instance.pk), str(instance))
             for instance in self.get_options(request=request, q=q)
         ]
-        return self._build_async_options(request, items)
 
-    def lookups(
-        self,
-        request: HttpRequest,
-        model_admin: ModelAdmin[Any],
-    ) -> list[tuple[str, str]]:
-        """Return choices rendered initially by Django's list-filter template."""
+    def _selected_option_items(self) -> list[tuple[str, str]]:
+        """Return only the currently selected options, as ``(key, label)`` pairs."""
         assert self.model is not None
-        if self.async_call:
-            selected_pks = [
-                value for value in self.selected_values() if value != self.null_value
-            ]
-            selected_instances = (
-                self.model._default_manager.filter(pk__in=selected_pks)
-                if selected_pks
-                else self.model._default_manager.none()
-            )
-            options = [
-                (str(instance.pk), str(instance)) for instance in selected_instances
-            ]
-        else:
-            options = [
-                (str(instance.pk), str(instance)) for instance in self.get_options()
-            ]
-        if self.has_null_option:
-            options.append((self.null_value, "-"))
-        return options
+        selected_pks = [
+            value for value in self.selected_values() if value != self.null_value
+        ]
+        selected_instances = (
+            self.model._default_manager.filter(pk__in=selected_pks)
+            if selected_pks
+            else self.model._default_manager.none()
+        )
+        return [(str(instance.pk), str(instance)) for instance in selected_instances]
 
 
 class ChoiceFilter(BaseSelectFilter):
@@ -490,41 +494,29 @@ class ChoiceFilter(BaseSelectFilter):
             ]
         return options
 
-    def get_async_options(
+    def _option_items(
         self,
-        request: HttpRequest,
-        q: str,
+        request: HttpRequest | None = None,
+        q: str = "",
     ) -> list[tuple[str, str]]:
-        """Return Select2 options for an API request and its search term."""
-        items = [
+        """Return every available option as ``(key, label)`` string pairs."""
+        return [
             (str(value), label)
             for value, label in self.get_options(request=request, q=q)
         ]
-        return self._build_async_options(request, items)
 
-    def lookups(
-        self,
-        request: HttpRequest,
-        model_admin: ModelAdmin[Any],
-    ) -> list[tuple[str, str]]:
-        """Return choices rendered initially by Django's list-filter template."""
+    def _selected_option_items(self) -> list[tuple[str, str]]:
+        """Return only the currently selected options, as ``(key, label)`` pairs."""
         assert self.options is not None
-        options: list[tuple[str, str]]
-        if self.async_call:
-            selected_values = [
-                value for value in self.selected_values() if value != self.null_value
-            ]
-            option_by_key = {str(value): label for value, label in self.options}
-            options = [
-                (value, option_by_key[value])
-                for value in selected_values
-                if value in option_by_key
-            ]
-        else:
-            options = [(str(value), label) for value, label in self.get_options()]
-        if self.has_null_option:
-            options.append((self.null_value, "-"))
-        return options
+        selected_values = [
+            value for value in self.selected_values() if value != self.null_value
+        ]
+        option_by_key = {str(value): label for value, label in self.options}
+        return [
+            (value, option_by_key[value])
+            for value in selected_values
+            if value in option_by_key
+        ]
 
 
 @functools.cache
