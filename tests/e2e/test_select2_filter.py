@@ -26,9 +26,6 @@ def test_sync_filter_navigates_and_filters_results(live_server, page, admin_user
     page.goto(f"{live_server.url}/e2e-admin/testapp/book/")
 
     page.locator("select.django-admin-select-filter + span .select2-selection").click()
-    expect(page.locator(".select2-search__field")).to_have_attribute(
-        "autocomplete", "off"
-    )
     page.get_by_role("option", name="Rowling").click()
 
     expect(page).to_have_url(re.compile(r"author="))

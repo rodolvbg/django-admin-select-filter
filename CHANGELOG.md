@@ -35,7 +35,5 @@
   `django.contrib.admin.site`. It now checks every registered `AdminSite`.
 - Added `BaseSelectFilter.searchable`: set to `False` to hide Select2's
   search input and get a plain dropdown, for a short static option list.
-  Distinct from `autocomplete`, which only toggles the browser's own native
-  autofill suggestions on that search input and has no effect on its own.
 - Fixed dark-mode styling for `multiple = True`: the CSS only targeted
   Select2's single-selection markup, leaving the multi-select chips unstyled.

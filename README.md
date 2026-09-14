@@ -96,15 +96,12 @@ class BookAdmin(admin.ModelAdmin):
 ```
 
 Both filters share the same options: `filter_only_used_values`, `async_call`,
-`autocomplete`, `searchable`, `nullable` and `title`. Both also support a
-nested lookup for `parameter_name` (e.g. `"author__status"`), resolving the
-field — and, for `ForeignKeyFilter`, the `model` — by walking each
-`__`-separated relation in turn, forward or reverse.
+`searchable`, `nullable` and `title`. Both also support a nested lookup for
+`parameter_name` (e.g. `"author__status"`), resolving the field — and, for
+`ForeignKeyFilter`, the `model` — by walking each `__`-separated relation in
+turn, forward or reverse.
 
-`autocomplete` and `searchable` control different things: `autocomplete`
-only suppresses the browser's own native autofill suggestions on Select2's
-search input (it has no effect on whether that input is shown). Set
-`searchable = False` to hide the search input entirely and get a plain
+Set `searchable = False` to hide the search input entirely and get a plain
 dropdown instead — best for a short, static option list.
 
 Set `multiple = True` to let either filter accept several values at once:
