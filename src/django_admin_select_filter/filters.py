@@ -11,10 +11,8 @@ from django.http import HttpRequest
 from django.utils.functional import cached_property
 from django.utils.translation import gettext
 
-from django_admin_select_filter.mixins import AdminSelectFilterMixin
 
-
-class BaseSelectFilter(AdminSelectFilterMixin, SimpleListFilter):
+class BaseSelectFilter(SimpleListFilter):
     """Shared plumbing for the project's Select2-powered admin list filters.
 
     Handles everything that doesn't depend on where the options come from:
@@ -219,6 +217,7 @@ class ForeignKeyFilter(BaseSelectFilter):
     be overridden if those values conflict with valid primary keys.
     """
 
+    template = "admin_select_filter/filters/foreign_key_filter.html"
     model: type[models.Model] | None = None
     ordering: ClassVar[list[str]] = []
     only: ClassVar[list[str]] = []
@@ -358,6 +357,7 @@ class ChoiceFilter(BaseSelectFilter):
     be overridden if those values conflict with valid option values.
     """
 
+    template = "admin_select_filter/filters/choice_filter.html"
     options: list[tuple[Any, str]] | None = None
 
     def __init__(

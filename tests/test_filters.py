@@ -700,6 +700,26 @@ class ChoiceFilterTests(TestCase):
         ]
         assert filter_instance.title == "genre"
 
+    def test_template_renders_select2_markup(self):
+        Book.objects.create(title="Dune", genre="fiction")
+
+        request = RequestFactory().get("/admin/tests/book/")
+        filter_instance = self._build_filter(GenreFilter, request)
+
+        html = render_to_string(
+            filter_instance.template,
+            {
+                "spec": filter_instance,
+                "title": filter_instance.title,
+                "choices": list(filter_instance.choices(_FakeChangeList())),
+            },
+            request=request,
+        )
+
+        assert 'class="django-admin-select-filter"' in html
+        assert 'data-parameter-name="genre"' in html
+        assert "Fiction" in html
+
     def test_explicit_title_skips_default_lookup(self):
         request = RequestFactory().get("/admin/")
         filter_instance = self._build_filter(FixedTitleGenreFilter, request)

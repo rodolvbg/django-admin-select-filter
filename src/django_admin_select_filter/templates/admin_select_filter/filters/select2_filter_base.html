@@ -1,7 +1,9 @@
 {% load i18n static %}
 <link rel="stylesheet" href="{% static 'admin/css/vendor/select2/select2.css' %}">
 <link rel="stylesheet" href="{% static 'admin_select_filter/css/admin_select2_filter.css' %}">
-<h3>{% blocktranslate with filter_title=title %} By {{ filter_title }} {% endblocktranslate %}</h3>
+{% block filter_title %}
+  <h3>{% blocktranslate with filter_title=title %} By {{ filter_title }} {% endblocktranslate %}</h3>
+{% endblock filter_title %}
 <ul>
   <li>
     <select
@@ -19,16 +21,19 @@
       data-parameter-name="{{ spec.parameter_name }}"
       data-facets="{{ spec.facets|yesno:'true,false' }}"
       data-all-value="{{ spec.all_value }}"
+      {% block select_attrs %}{% endblock %}
     >
-      {% for choice in choices %}
-        <option
-          data-key="{{ choice.key }}"
-          value="{{ choice.query_string|iriencode }}"
-          {% if choice.selected %}selected{% endif %}
-        >
-          {{ choice.display }}
-        </option>
-      {% endfor %}
+      {% block options %}
+        {% for choice in choices %}
+          <option
+            data-key="{{ choice.key }}"
+            value="{{ choice.query_string|iriencode }}"
+            {% if choice.selected %}selected{% endif %}
+          >
+            {{ choice.display }}
+          </option>
+        {% endfor %}
+      {% endblock options %}
     </select>
   </li>
 </ul>
