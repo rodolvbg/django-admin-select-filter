@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import functools
+import json
 from collections.abc import Iterator
 from typing import Any, ClassVar
 
-import django
 from django.contrib.admin import ModelAdmin
 from django.contrib.admin.filters import SimpleListFilter
 from django.core.exceptions import FieldDoesNotExist
@@ -23,28 +23,77 @@ from django.utils.translation import gettext
 # already depends on views.py, which depends on this module.
 ASYNC_CALL_URL_NAME = "options"
 
-# django.forms.Script (a Media.js entry that can carry extra attributes, such
-# as type="module") only exists from Django 5.2 on. This package supports
-# Django >= 4.2, so older versions fall back to a mark_safe()-wrapped literal
-# <script> tag instead — Media.render_js() has always deferred to
-# path.__html__() when present rather than building the tag itself, so that
-# fallback works uniformly back to 4.2.
-_SUPPORTS_SCRIPT_ATTRS = django.VERSION >= (5, 2)
+
+def _csp_nonce(request: HttpRequest | None) -> str | None:
+    """Return ``request.csp_nonce`` as a plain string, or ``None``.
+
+    That attribute is set by Django's own CSP middleware (6.0+) and by the
+    third-party ``django-csp`` package alike, so this picks up either
+    without a dependency on which one (or neither) a project uses.
+
+    Not ``if nonce``: Django's own ``LazyNonce`` evaluates falsy until first
+    accessed elsewhere, even though converting it here would happily
+    generate one — only its absence (a plain ``None``) means no CSP nonce
+    support is active at all.
+    """
+    nonce = getattr(request, "csp_nonce", None)
+    return str(nonce) if nonce is not None else None
 
 
-def _module_script(path: str) -> Any:
+def _module_script(path: str, request: HttpRequest | None) -> Any:
     """Render ``path`` as an ES module ``<script>`` tag for use in a ``Media.js`` list.
 
-    Returns ``Any`` rather than a precise type: django-stubs types
-    ``Media.js`` as ``Sequence[str] | None``, not accounting for
-    ``django.forms.Script`` (a non-``str`` ``Media`` asset) even on a Django
-    version that has it.
-    """
-    if _SUPPORTS_SCRIPT_ATTRS:
-        from django.forms import Script
+    Adds a CSP nonce attribute from ``request.csp_nonce`` when present (see
+    :func:`_csp_nonce`) — needed for a ``script-src`` policy that doesn't
+    allow bare URLs without one.
 
-        return Script(path, type="module")
-    return mark_safe(f'<script type="module" src="{static(path)}"></script>')
+    ``django.forms.Script`` could build this ``<script>`` natively with a
+    ``type="module"`` attribute, but only from Django 5.2 on; this package
+    supports Django >= 4.2, so it renders the tag itself instead, via the
+    same ``__html__`` escape hatch ``Media.render_js()`` has always deferred
+    to when present rather than building the tag itself — this works
+    uniformly back to 4.2.
+
+    Returns ``Any`` rather than a precise type: django-stubs types
+    ``Media.js`` as ``Sequence[str] | None``, not accounting for a
+    ``SafeString``'s ``__html__()`` being used this way.
+    """
+    nonce = _csp_nonce(request)
+    nonce_attr = f' nonce="{nonce}"' if nonce else ""
+    return mark_safe(
+        f'<script type="module"{nonce_attr} src="{static(path)}"></script>'
+    )
+
+
+def _import_map_script(imports: dict[str, str], request: HttpRequest | None) -> Any:
+    """Render a ``<script type="importmap">`` mapping bare specifiers (e.g.
+    ``"core"``) to ``imports``' static-relative paths, for use in a
+    ``Media.js`` list.
+
+    Our JS modules import each other by bare specifier (``import {
+    registerPlugin } from "core"``) rather than a relative path
+    (``"./core.js"``): a relative import isn't rewritten by a hashed static
+    storage (e.g. ``ManifestStaticFilesStorage``) the way a template's
+    ``{% static %}`` call is, so it would 404 in production once `core.js`
+    gets renamed to something like `core.3b2f1a.js`. An import map resolves
+    the bare specifier through ``static()`` instead, same as everything else.
+
+    Adds a CSP nonce attribute from ``request.csp_nonce`` when present (see
+    :func:`_csp_nonce`) — an import map is inline content, so a
+    ``script-src`` policy without ``'unsafe-inline'`` requires one.
+
+    Uses the same ``__html__`` escape hatch as :func:`_module_script` (no
+    ``django.forms.widgets.MediaAsset`` dependency, so it doesn't need a
+    Django-version check) — this is JSON we build ourselves from our own
+    static paths, not user input, so embedding it directly is safe.
+    """
+    payload = {"imports": {name: static(path) for name, path in imports.items()}}
+    nonce = _csp_nonce(request)
+    nonce_attr = f' nonce="{nonce}"' if nonce else ""
+    return mark_safe(
+        f'<script type="importmap"{nonce_attr}>'
+        f"{json.dumps(payload, ensure_ascii=False)}</script>"
+    )
 
 
 class BaseSelectFilter(SimpleListFilter):
@@ -153,14 +202,29 @@ class BaseSelectFilter(SimpleListFilter):
         a template (as Django's own admin templates do), since ``Media``
         resolves ``.css``/``.js`` through ``__getitem__`` rather than a real
         attribute — plain attribute access isn't available.
+
+        Each ``<script>`` picks up a CSP nonce from ``request.csp_nonce`` when
+        present — set by Django's own CSP middleware (6.0+) or by the
+        third-party ``django-csp`` package, both of which expose it under
+        that same attribute name; harmless to skip when neither is in use.
         """
-        js = [_module_script("admin_select_filter/js/core.js")]
+        request = getattr(self, "request", None)
+        js = [
+            _import_map_script({"core": "admin_select_filter/js/core.js"}, request),
+            _module_script("admin_select_filter/js/core.js", request),
+        ]
         if self.async_call:
-            js.append(_module_script("admin_select_filter/js/async_options.js"))
+            js.append(
+                _module_script("admin_select_filter/js/async_options.js", request)
+            )
         if not self.searchable:
-            js.append(_module_script("admin_select_filter/js/non_searchable.js"))
+            js.append(
+                _module_script("admin_select_filter/js/non_searchable.js", request)
+            )
         if self.multiple:
-            js.append(_module_script("admin_select_filter/js/multiple_navigation.js"))
+            js.append(
+                _module_script("admin_select_filter/js/multiple_navigation.js", request)
+            )
         return Media(
             css={
                 "all": [

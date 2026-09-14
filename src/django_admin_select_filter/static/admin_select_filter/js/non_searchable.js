@@ -1,4 +1,4 @@
-import { registerPlugin } from "./core.js";
+import { registerPlugin } from "core";
 
 // Loaded only when a filter has searchable = False (see base.html).
 registerPlugin({

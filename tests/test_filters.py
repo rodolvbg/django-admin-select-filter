@@ -1,5 +1,4 @@
 import re
-from unittest import mock
 
 import pytest
 from django.contrib import admin
@@ -423,13 +422,16 @@ class BaseSelectFilterTests(TestCase):
                 css_html,
             )
 
-        with self.subTest("sync, searchable, single: only core.js"):
+        with self.subTest("sync, searchable, single: import map + core.js only"):
             filter_instance = self._build(
                 async_call=False, searchable=True, multiple=False
             )
             js_html = str(filter_instance.media["js"])
+            self.assertIn('type="importmap"', js_html)
+            self.assertIn('"core": "/static/admin_select_filter/js/core.js"', js_html)
             self.assertIn('type="module"', js_html)
             self.assertIn('src="/static/admin_select_filter/js/core.js"', js_html)
+            self.assertLess(js_html.index("importmap"), js_html.index('type="module"'))
             self.assertNotIn("async_options.js", js_html)
             self.assertNotIn("non_searchable.js", js_html)
             self.assertNotIn("multiple_navigation.js", js_html)
@@ -461,6 +463,7 @@ class BaseSelectFilterTests(TestCase):
             )
             js_html = str(filter_instance.media["js"])
             names = [
+                "importmap",
                 "core.js",
                 "async_options.js",
                 "non_searchable.js",
@@ -468,19 +471,22 @@ class BaseSelectFilterTests(TestCase):
             ]
             positions = [js_html.index(name) for name in names]
             self.assertEqual(positions, sorted(positions))
-            self.assertEqual(js_html.count("<script"), 4)
+            self.assertEqual(js_html.count("<script"), 5)
 
-        with self.subTest("falls back to a literal tag before Django 5.2"):
-            with mock.patch(
-                "django_admin_select_filter.filters._SUPPORTS_SCRIPT_ATTRS", False
-            ):
-                filter_instance = self._build()
-                js_html = str(filter_instance.media["js"])
-            self.assertEqual(
-                js_html,
-                '<script type="module" '
-                'src="/static/admin_select_filter/js/core.js"></script>',
-            )
+        with self.subTest("no request attribute at all: no CSP nonce, no crash"):
+            filter_instance = self._build()
+            self.assertNotIn("nonce", str(filter_instance.media["js"]))
+
+        with self.subTest("request without csp_nonce: no CSP nonce"):
+            filter_instance = self._build(request=RequestFactory().get("/admin/"))
+            self.assertNotIn("nonce", str(filter_instance.media["js"]))
+
+        with self.subTest("csp_nonce picked up from the request"):
+            request = RequestFactory().get("/admin/")
+            request.csp_nonce = "abc123"
+            filter_instance = self._build(request=request)
+            js_html = str(filter_instance.media["js"])
+            self.assertEqual(js_html.count('nonce="abc123"'), 2)
 
     def test_choices(self):
         with self.subTest("single selection"):
