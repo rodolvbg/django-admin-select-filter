@@ -5,6 +5,7 @@ from django.contrib import admin
 from django.db import transaction
 from django.template.loader import render_to_string
 from django.test import RequestFactory, TestCase
+from django.urls import reverse
 
 from django_admin_select_filter.filters import (
     BaseSelectFilter,
@@ -69,6 +70,38 @@ class BaseSelectFilterTests(TestCase):
         for name, value in attrs.items():
             setattr(filter_instance, name, value)
         return filter_instance
+
+    def test_async_call_url(self):
+        with self.subTest("class default is None"):
+            self.assertIsNone(BaseSelectFilter.async_call_url)
+
+        with self.subTest("resolved via reverse() when async and unset"):
+            request = RequestFactory().get("/admin/")
+            filter_instance = AsyncAuthorFilter(
+                request, {}, Book, admin.site._registry[Book]
+            )
+            self.assertEqual(
+                filter_instance.async_call_url,
+                reverse("admin_select_filter:options"),
+            )
+
+        with self.subTest("left as None when not async"):
+            request = RequestFactory().get("/admin/")
+            filter_instance = AuthorFilter(
+                request, {}, Book, admin.site._registry[Book]
+            )
+            self.assertIsNone(filter_instance.async_call_url)
+
+        with self.subTest("explicit override is preserved"):
+
+            class CustomAsyncFilter(AsyncAuthorFilter):
+                async_call_url = "/custom/options/"
+
+            request = RequestFactory().get("/admin/")
+            filter_instance = CustomAsyncFilter(
+                request, {}, Book, admin.site._registry[Book]
+            )
+            self.assertEqual(filter_instance.async_call_url, "/custom/options/")
 
     def test_model_admin_queryset_caches_the_admin_queryset(self):
         model_admin = _FakeModelAdmin(Book.objects.all())

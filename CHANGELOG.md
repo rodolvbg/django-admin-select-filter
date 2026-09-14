@@ -37,3 +37,13 @@
   search input and get a plain dropdown, for a short static option list.
 - Fixed dark-mode styling for `multiple = True`: the CSS only targeted
   Select2's single-selection markup, leaving the multi-select chips unstyled.
+- Added the `DJANGO_ADMIN_SELECT_FILTERS_ASYNC_CALL_URL` setting to configure
+  the options endpoint's URL path (defaults to
+  `"django_admin_select_filter/options/"`).
+- Added `BaseSelectFilter.async_call_url`: the JS now reads the async
+  endpoint from this per-filter attribute. Left unset (the default), it
+  resolves via `reverse("admin_select_filter:options")` at request time, so
+  it's always correct regardless of the admin page it's rendered on and
+  wherever that urlconf is mounted (a bare relative path there would resolve
+  against the *current page*, not that mount point, and silently hit the
+  wrong URL). Set it explicitly on a filter to point it at a custom view.

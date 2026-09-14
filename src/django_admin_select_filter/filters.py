@@ -8,6 +8,7 @@ from django.contrib.admin.filters import SimpleListFilter
 from django.core.exceptions import FieldDoesNotExist
 from django.db import models
 from django.http import HttpRequest
+from django.urls import reverse
 from django.utils.functional import cached_property
 from django.utils.translation import gettext
 
@@ -49,6 +50,18 @@ class BaseSelectFilter(SimpleListFilter):
     ``multiple_separator``
         Character joining multiple selected values in the query string. It
         defaults to ``","``.
+    ``async_call_url``
+        URL the Select2 widget's JS fetches options from when ``async_call``
+        is true. Left as ``None`` (the default), it resolves to
+        ``reverse("admin_select_filter:options")`` — the shared endpoint
+        ``django_admin_select_filter.urls`` registers (its own path
+        configurable via the ``DJANGO_ADMIN_SELECT_FILTERS_ASYNC_CALL_URL``
+        setting). ``reverse()`` is what makes this work correctly regardless
+        of the admin page the filter is rendered on and wherever that
+        urlconf is actually mounted — a bare path segment like ``"options/"``
+        would resolve relative to the *current page*, not that mount point,
+        and silently hit the wrong URL. Set it explicitly on a filter only to
+        point it at a genuinely different, custom view.
     """
 
     filter_only_used_values: ClassVar[bool] = True
@@ -59,6 +72,7 @@ class BaseSelectFilter(SimpleListFilter):
     null_value: ClassVar[str] = "__null__"
     multiple: ClassVar[bool] = False
     multiple_separator: ClassVar[str] = ","
+    async_call_url: str | None = None
     title: Any | None = None
     parameter_name: str | None = None
 
@@ -80,6 +94,8 @@ class BaseSelectFilter(SimpleListFilter):
             not self.async_call or not self.filter_only_used_values
         ) and self._has_null_option()
         self.facets = self.request.GET.get("_facets") == "True"
+        if self.async_call and self.async_call_url is None:
+            self.async_call_url = reverse("admin_select_filter:options")
 
         super().__init__(request, params, admin_model, model_admin)
 

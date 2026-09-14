@@ -27,14 +27,36 @@ urlpatterns = [
 ]
 ```
 
+The sub-path after that prefix (`django_admin_select_filter/options/` by
+default) is itself configurable via the
+`DJANGO_ADMIN_SELECT_FILTERS_ASYNC_CALL_URL` setting, in case it collides
+with something else in your project:
+
+```python
+# settings.py
+DJANGO_ADMIN_SELECT_FILTERS_ASYNC_CALL_URL = "custom-options/"
+```
+
+Each `async_call` filter reads that shared endpoint through
+`BaseSelectFilter.async_call_url`, resolved automatically at request time via
+`reverse("admin_select_filter:options")`. Set `async_call_url` on a specific
+filter to point it at a different view instead:
+
+```python
+class AuthorFilter(ForeignKeyFilter):
+    parameter_name = "author"
+    async_call = True
+    async_call_url = "/api/custom-author-options/"
+```
+
 If it shares a prefix with your admin mount (e.g. both under `admin/`), list
 this path **before** `path("admin/", admin.site.urls)`. Since Django 4.1,
 `AdminSite` registers a catch-all view (`AdminSite.final_catch_all_view`,
 enabled by default) that matches every otherwise-unmatched URL under its own
 prefix and raises `Http404` itself — so if the admin mount comes first, it
-swallows requests to `admin/select-filter/options/` before this app's URLs
-ever get a chance to match, and you'll see a 404 with a full HTML body (the
-admin's own "Page not found" page) instead of this app's JSON response.
+swallows requests to this app's options endpoint before its URLs ever get a
+chance to match, and you'll see a 404 with a full HTML body (the admin's own
+"Page not found" page) instead of this app's JSON response.
 
 The filter template loads jQuery/Select2 from Django admin's bundled vendor
 assets on demand, so no extra JS dependency is required. Make sure
