@@ -40,6 +40,15 @@ class BaseSelectFilter(SimpleListFilter):
     ``title``
         Label shown by Django above the filter. By default it uses the related
         model admin's plural verbose name.
+    ``multiple``
+        When true, the Select2 widget accepts several values at once and
+        ``queryset()`` filters with an ``__in`` lookup. Selected values are
+        stored in the query string joined by ``multiple_separator``, so
+        configured values (primary keys, option values) must not contain it.
+        It defaults to false.
+    ``multiple_separator``
+        Character joining multiple selected values in the query string. It
+        defaults to ``","``.
     """
 
     filter_only_used_values: ClassVar[bool] = True
@@ -48,6 +57,8 @@ class BaseSelectFilter(SimpleListFilter):
     nullable: bool | None = None
     all_value: ClassVar[str] = "__all__"
     null_value: ClassVar[str] = "__null__"
+    multiple: ClassVar[bool] = False
+    multiple_separator: ClassVar[str] = ","
     title: Any | None = None
     parameter_name: str | None = None
 
@@ -145,8 +156,14 @@ class BaseSelectFilter(SimpleListFilter):
         request: HttpRequest,
         items: list[tuple[str, str]],
     ) -> list[tuple[str, str]]:
-        """Assemble the "All"/items/null options, applying facet counts if asked."""
-        options = [(self.all_value, gettext("All")), *items]
+        """Assemble the "All"/items/null options, applying facet counts if asked.
+
+        The "All" option is skipped when ``multiple`` is enabled: clearing
+        every selected value already means "no filter" for a multi-select.
+        """
+        options = (
+            list(items) if self.multiple else [(self.all_value, gettext("All")), *items]
+        )
         if self._has_null_option():
             options.append((self.null_value, "-"))
         if request.GET.get("facets") == "true":
@@ -166,24 +183,52 @@ class BaseSelectFilter(SimpleListFilter):
         """Keep asynchronous filters visible before their options are loaded."""
         return self.async_call or super().has_output()
 
+    def selected_values(self) -> list[str]:
+        """Return the selected raw values, splitting on ``multiple_separator``
+        when ``multiple`` is enabled. Empty when nothing is selected."""
+        value = self.value()
+        if not value:
+            return []
+        if not self.multiple:
+            return [value]
+        return [item for item in value.split(self.multiple_separator) if item]
+
     def queryset(
         self,
         request: HttpRequest,
         queryset: models.QuerySet[Any],
     ) -> models.QuerySet[Any]:
-        """Apply the selected value or the null lookup to the changelist queryset."""
-        value = self.value()
-        if value is None or self.parameter_name is None:
+        """Apply the selected value(s) or the null lookup to the changelist queryset."""
+        if self.parameter_name is None:
             return queryset
-        if value == self.null_value:
-            return queryset.filter(**{f"{self.parameter_name}__isnull": True})
-        return queryset.filter(**{self.parameter_name: value})
+        values = self.selected_values()
+        if not values:
+            return queryset
+        if not self.multiple:
+            value = values[0]
+            if value == self.null_value:
+                return queryset.filter(**{f"{self.parameter_name}__isnull": True})
+            return queryset.filter(**{self.parameter_name: value})
+        real_values = [value for value in values if value != self.null_value]
+        condition = models.Q()
+        if real_values:
+            condition |= models.Q(**{f"{self.parameter_name}__in": real_values})
+        if self.null_value in values:
+            condition |= models.Q(**{f"{self.parameter_name}__isnull": True})
+        return queryset.filter(condition)
 
     def choices(self, changelist: Any) -> Iterator[dict[str, Any]]:  # type: ignore[override]
-        """Yield Django choices with the raw lookup key required by Select2."""
+        """Yield Django choices with the raw lookup key required by Select2.
+
+        ``selected`` is recomputed against :meth:`selected_values` rather than
+        Django's own single-value comparison, so it stays correct when
+        ``multiple`` is enabled and several values are selected at once.
+        """
+        selected_values = self.selected_values()
         for index, choice in enumerate(super().choices(changelist)):
             key = "" if index == 0 else str(self.lookup_choices[index - 1][0])
-            yield {**choice, "key": key}
+            selected = not selected_values if index == 0 else key in selected_values
+            yield {**choice, "key": key, "selected": selected}
 
     def get_async_options(
         self,
@@ -320,13 +365,17 @@ class ForeignKeyFilter(BaseSelectFilter):
         """Return choices rendered initially by Django's list-filter template."""
         assert self.model is not None
         if self.async_call:
-            selected_value = self.value()
-            selected = (
-                self.model._default_manager.filter(pk=selected_value).first()
-                if selected_value and selected_value != self.null_value
-                else None
+            selected_pks = [
+                value for value in self.selected_values() if value != self.null_value
+            ]
+            selected_instances = (
+                self.model._default_manager.filter(pk__in=selected_pks)
+                if selected_pks
+                else self.model._default_manager.none()
             )
-            options = [(str(selected.pk), str(selected))] if selected else []
+            options = [
+                (str(instance.pk), str(instance)) for instance in selected_instances
+            ]
         else:
             options = [
                 (str(instance.pk), str(instance)) for instance in self.get_options()
@@ -436,18 +485,15 @@ class ChoiceFilter(BaseSelectFilter):
         assert self.options is not None
         options: list[tuple[str, str]]
         if self.async_call:
-            selected_value = self.value()
-            selected_pair = None
-            if selected_value and selected_value != self.null_value:
-                selected_pair = next(
-                    (
-                        (str(value), label)
-                        for value, label in self.options
-                        if str(value) == selected_value
-                    ),
-                    None,
-                )
-            options = [selected_pair] if selected_pair is not None else []
+            selected_values = [
+                value for value in self.selected_values() if value != self.null_value
+            ]
+            option_by_key = {str(value): label for value, label in self.options}
+            options = [
+                (value, option_by_key[value])
+                for value in selected_values
+                if value in option_by_key
+            ]
         else:
             options = [(str(value), label) for value, label in self.get_options()]
         if self.has_null_option:

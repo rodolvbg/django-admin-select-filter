@@ -26,6 +26,15 @@ class AsyncAuthorFilter(AuthorFilter):
     async_call = True
 
 
+class MultipleAuthorFilter(AuthorFilter):
+    multiple = True
+
+
+class MultipleAsyncAuthorFilter(AuthorFilter):
+    multiple = True
+    async_call = True
+
+
 class OnlyNameAuthorFilter(ForeignKeyFilter):
     model = Author
     parameter_name = "author"
@@ -43,6 +52,15 @@ class GenreFilter(ChoiceFilter):
 
 
 class AsyncGenreFilter(GenreFilter):
+    async_call = True
+
+
+class MultipleGenreFilter(GenreFilter):
+    multiple = True
+    filter_only_used_values = False
+
+
+class MultipleAsyncGenreFilter(MultipleGenreFilter):
     async_call = True
 
 

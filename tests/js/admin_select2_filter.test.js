@@ -35,13 +35,50 @@ function addAsyncFilter() {
   `;
 }
 
-function installDjangoJQuery({ select2Installed = true } = {}) {
+function addMultipleFilter() {
+	document.body.innerHTML = `
+    <select
+      class="django-admin-select-filter"
+      multiple
+      data-placeholder="Search"
+      data-jquery-url="/jquery.js"
+      data-jquery-init-url="/jquery.init.js"
+      data-select2-url="/select2.js"
+      data-autocomplete="true"
+      data-parameter-name="author"
+      data-all-value="__all__"
+      data-multiple="true"
+      data-multiple-separator=","
+    ></select>
+  `;
+}
+
+function mockLocationAssign() {
+	const assign = vi.fn();
+	const original = window.location;
+	Object.defineProperty(window, "location", {
+		configurable: true,
+		value: { ...original, assign },
+	});
+	return {
+		assign,
+		restore: () => {
+			Object.defineProperty(window, "location", {
+				configurable: true,
+				value: original,
+			});
+		},
+	};
+}
+
+function installDjangoJQuery({ select2Installed = true, val = null } = {}) {
 	const select2 = vi.fn();
 	const on = vi.fn();
-	const jquery = vi.fn(() => ({ select2, on }));
+	const valFn = vi.fn(() => val);
+	const jquery = vi.fn(() => ({ select2, on, val: valFn }));
 	jquery.fn = select2Installed ? { select2: vi.fn() } : {};
 	window.django = { jQuery: jquery };
-	return { jquery, on, select2 };
+	return { jquery, on, select2, val: valFn };
 }
 
 describe("admin Select2 filter", () => {
@@ -221,5 +258,59 @@ describe("admin Select2 filter", () => {
 		selectHandler({ params: { data: { id: "__all__" } } });
 
 		expect(consoleError).toHaveBeenCalled();
+	});
+
+	it("registers a select2:close handler instead of select2:select for multiple filters", async () => {
+		addMultipleFilter();
+		const { on } = installDjangoJQuery();
+		await import(modulePath);
+
+		expect(
+			on.mock.calls.some(([eventName]) => eventName === "select2:close"),
+		).toBe(true);
+		expect(
+			on.mock.calls.some(([eventName]) => eventName === "select2:select"),
+		).toBe(false);
+	});
+
+	it("joins every selected value on close for a multiple filter", async () => {
+		addMultipleFilter();
+		const { on } = installDjangoJQuery({ val: ["1", "2"] });
+		window.history.replaceState({}, "", "/admin/testapp/book/?p=2");
+		const { assign, restore } = mockLocationAssign();
+		try {
+			await import(modulePath);
+			const closeHandler = on.mock.calls.find(
+				([eventName]) => eventName === "select2:close",
+			)[1];
+
+			closeHandler();
+
+			const url = new URL(assign.mock.calls[0][0]);
+			expect(url.searchParams.get("author")).toBe("1,2");
+			expect(url.searchParams.has("p")).toBe(false);
+		} finally {
+			restore();
+		}
+	});
+
+	it("clears the parameter when a multiple filter has nothing selected", async () => {
+		addMultipleFilter();
+		const { on } = installDjangoJQuery({ val: null });
+		window.history.replaceState({}, "", "/admin/testapp/book/?author=1,2");
+		const { assign, restore } = mockLocationAssign();
+		try {
+			await import(modulePath);
+			const closeHandler = on.mock.calls.find(
+				([eventName]) => eventName === "select2:close",
+			)[1];
+
+			closeHandler();
+
+			const url = new URL(assign.mock.calls[0][0]);
+			expect(url.searchParams.has("author")).toBe(false);
+		} finally {
+			restore();
+		}
 	});
 });

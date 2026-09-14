@@ -58,23 +58,43 @@ async function initializeFilters() {
 					?.setAttribute("autocomplete", "off");
 			});
 		}
-		select.on("select2:select", (event) => {
-			if (element.dataset.asyncCall === "true" && !event.params.data.element) {
+		if (element.dataset.multiple === "true") {
+			select.on("select2:close", () => {
+				const values = [].concat(select.val() || []).filter(Boolean);
 				const url = new URL(window.location.href);
-				if (event.params.data.id === element.dataset.allValue) {
+				if (values.length === 0) {
 					url.searchParams.delete(element.dataset.parameterName);
 				} else {
 					url.searchParams.set(
 						element.dataset.parameterName,
-						event.params.data.id,
+						values.join(element.dataset.multipleSeparator),
 					);
 				}
 				url.searchParams.delete("p");
 				window.location.assign(url.toString());
-			} else {
-				window.location.assign(event.params.data.id);
-			}
-		});
+			});
+		} else {
+			select.on("select2:select", (event) => {
+				if (
+					element.dataset.asyncCall === "true" &&
+					!event.params.data.element
+				) {
+					const url = new URL(window.location.href);
+					if (event.params.data.id === element.dataset.allValue) {
+						url.searchParams.delete(element.dataset.parameterName);
+					} else {
+						url.searchParams.set(
+							element.dataset.parameterName,
+							event.params.data.id,
+						);
+					}
+					url.searchParams.delete("p");
+					window.location.assign(url.toString());
+				} else {
+					window.location.assign(event.params.data.id);
+				}
+			});
+		}
 	}
 }
 

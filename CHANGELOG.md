@@ -20,3 +20,13 @@
   `base.html` with the shared markup and blocks, and a
   `foreign_key_filter.html`/`choice_filter.html` pair that each extend it —
   `ForeignKeyFilter` and `ChoiceFilter` now set their own `template`.
+- Added `BaseSelectFilter.multiple`: both filters can now select several
+  values at once, filtering with an `__in` lookup (combined with the null
+  lookup when the null option is also selected). Selected values are joined
+  in the query string via `multiple_separator`. The Select2 widget switches
+  to its native multi-select mode and the JS waits for the dropdown to close
+  before navigating, instead of navigating on every single selection.
+- `BaseSelectFilter`, `ForeignKeyFilter` and `ChoiceFilter` are now importable
+  directly from `django_admin_select_filter` (e.g.
+  `from django_admin_select_filter import ForeignKeyFilter`), not just from
+  `django_admin_select_filter.filters`.

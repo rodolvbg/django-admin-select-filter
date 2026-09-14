@@ -9,6 +9,7 @@
     <select
       class="django-admin-select-filter"
       aria-label="{{ title }}"
+      {% if spec.multiple %}multiple{% endif %}
       data-placeholder="{% translate 'Search' %}"
       data-jquery-url="{% static 'admin/js/vendor/jquery/jquery.min.js' %}"
       data-jquery-init-url="{% static 'admin/js/jquery.init.js' %}"
@@ -21,17 +22,21 @@
       data-parameter-name="{{ spec.parameter_name }}"
       data-facets="{{ spec.facets|yesno:'true,false' }}"
       data-all-value="{{ spec.all_value }}"
+      data-multiple="{{ spec.multiple|yesno:'true,false' }}"
+      data-multiple-separator="{{ spec.multiple_separator }}"
       {% block select_attrs %}{% endblock %}
     >
       {% block options %}
         {% for choice in choices %}
-          <option
-            data-key="{{ choice.key }}"
-            value="{{ choice.query_string|iriencode }}"
-            {% if choice.selected %}selected{% endif %}
-          >
-            {{ choice.display }}
-          </option>
+          {% if not spec.multiple or choice.key %}
+            <option
+              data-key="{{ choice.key }}"
+              value="{% if spec.multiple %}{{ choice.key }}{% else %}{{ choice.query_string|iriencode }}{% endif %}"
+              {% if choice.selected %}selected{% endif %}
+            >
+              {{ choice.display }}
+            </option>
+          {% endif %}
         {% endfor %}
       {% endblock options %}
     </select>

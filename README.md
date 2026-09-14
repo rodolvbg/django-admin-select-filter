@@ -40,7 +40,7 @@ requesting user to have view permission on the target model (checked via
 
 ```python
 from django.contrib import admin
-from django_admin_select_filter.filters import ForeignKeyFilter
+from django_admin_select_filter import ForeignKeyFilter
 
 from myapp.models import Book
 
@@ -67,7 +67,7 @@ instead. It reads its options from the field's `choices` by default, or from an
 explicit `options` list:
 
 ```python
-from django_admin_select_filter.filters import ChoiceFilter
+from django_admin_select_filter import ChoiceFilter
 
 
 class GenreFilter(ChoiceFilter):
@@ -89,6 +89,20 @@ Both filters share the same options: `filter_only_used_values`, `async_call`,
 `parameter_name` (e.g. `"author__status"`), resolving the field — and, for
 `ForeignKeyFilter`, the `model` — by walking each `__`-separated relation in
 turn, forward or reverse.
+
+Set `multiple = True` to let either filter accept several values at once:
+
+```python
+class AuthorFilter(ForeignKeyFilter):
+    parameter_name = "author"
+    multiple = True
+```
+
+Selected values are joined in the query string with `multiple_separator`
+(`","` by default) and applied with an `__in` lookup, so configured values
+(primary keys, option values) must not contain that character. The "All"
+option is dropped in this mode — clearing every selected chip already means
+no filter.
 
 ## Development
 

@@ -1,3 +1,5 @@
+import re
+
 import pytest
 from django.contrib import admin
 from django.db import transaction
@@ -23,6 +25,10 @@ from tests.testapp.admin import (
     FixedTitleGenreFilter,
     GenreFilter,
     MissingFieldFilter,
+    MultipleAsyncAuthorFilter,
+    MultipleAsyncGenreFilter,
+    MultipleAuthorFilter,
+    MultipleGenreFilter,
     NonRelationChainFilter,
     OnlyNameAuthorFilter,
     UnknownChainFilter,
@@ -254,6 +260,19 @@ class BaseSelectFilterTests(TestCase):
                 ],
             )
 
+        with self.subTest("multiple skips the All option"):
+            filter_instance = self._build(
+                nullable=False,
+                parameter_name="author",
+                multiple=True,
+                model_admin=model_admin,
+                request=RequestFactory().get("/admin/"),
+            )
+            options = filter_instance._build_async_options(
+                RequestFactory().get("/api/"), items
+            )
+            self.assertEqual(options, items)
+
     def test_has_output(self):
         with self.subTest("async filter always has output"):
             filter_instance = self._build(async_call=True, lookup_choices=[])
@@ -267,10 +286,35 @@ class BaseSelectFilterTests(TestCase):
             filter_instance = self._build(async_call=False, lookup_choices=[])
             self.assertFalse(filter_instance.has_output())
 
+    def test_selected_values(self):
+        with self.subTest("nothing selected"):
+            filter_instance = self._build(parameter_name="x", used_parameters={})
+            self.assertEqual(filter_instance.selected_values(), [])
+
+        with self.subTest("single mode returns the raw value as-is"):
+            filter_instance = self._build(
+                parameter_name="x", used_parameters={"x": "a,b"}
+            )
+            self.assertEqual(filter_instance.selected_values(), ["a,b"])
+
+        with self.subTest("multiple mode splits on the separator"):
+            filter_instance = self._build(
+                parameter_name="x", used_parameters={"x": "a,b"}, multiple=True
+            )
+            self.assertEqual(filter_instance.selected_values(), ["a", "b"])
+
+        with self.subTest("multiple mode drops empty segments"):
+            filter_instance = self._build(
+                parameter_name="x", used_parameters={"x": "a,,b,"}, multiple=True
+            )
+            self.assertEqual(filter_instance.selected_values(), ["a", "b"])
+
     def test_queryset(self):
         Book.objects.create(title="Orphan", author=None)
         author = Author.objects.create(name="Rowling")
         Book.objects.create(title="HP", author=author)
+        tolkien = Author.objects.create(name="Tolkien")
+        Book.objects.create(title="LOTR", author=tolkien)
         request = RequestFactory().get("/admin/tests/book/")
         all_books = Book.objects.all()
 
@@ -299,22 +343,65 @@ class BaseSelectFilterTests(TestCase):
             result = filter_instance.queryset(request, all_books)
             self.assertEqual(list(result.values_list("title", flat=True)), ["HP"])
 
+        with self.subTest("multiple values filter with __in"):
+            filter_instance = self._build(
+                parameter_name="author",
+                used_parameters={"author": f"{author.pk},{tolkien.pk}"},
+                multiple=True,
+            )
+            result = filter_instance.queryset(request, all_books)
+            self.assertEqual(
+                set(result.values_list("title", flat=True)), {"HP", "LOTR"}
+            )
+
+        with self.subTest("multiple values combine __in with the null lookup"):
+            filter_instance = self._build(
+                parameter_name="author",
+                used_parameters={"author": f"{author.pk},__null__"},
+                multiple=True,
+            )
+            result = filter_instance.queryset(request, all_books)
+            self.assertEqual(
+                set(result.values_list("title", flat=True)), {"HP", "Orphan"}
+            )
+
+        with self.subTest("multiple with only the null value selected"):
+            filter_instance = self._build(
+                parameter_name="author",
+                used_parameters={"author": "__null__"},
+                multiple=True,
+            )
+            result = filter_instance.queryset(request, all_books)
+            self.assertEqual(list(result.values_list("title", flat=True)), ["Orphan"])
+
     def test_choices(self):
-        filter_instance = self._build(
-            parameter_name="x",
-            used_parameters={},
-            lookup_choices=[("a", "Label A"), ("b", "Label B")],
-        )
+        with self.subTest("single selection"):
+            filter_instance = self._build(
+                parameter_name="x",
+                used_parameters={},
+                lookup_choices=[("a", "Label A"), ("b", "Label B")],
+            )
+            choices = list(filter_instance.choices(_FakeChangeList()))
+            self.assertEqual([choice["key"] for choice in choices], ["", "a", "b"])
+            self.assertEqual(
+                [choice["display"] for choice in choices],
+                ["All", "Label A", "Label B"],
+            )
+            self.assertTrue(choices[0]["selected"])
+            self.assertFalse(choices[1]["selected"])
+            self.assertFalse(choices[2]["selected"])
 
-        choices = list(filter_instance.choices(_FakeChangeList()))
-
-        self.assertEqual([choice["key"] for choice in choices], ["", "a", "b"])
-        self.assertEqual(
-            [choice["display"] for choice in choices], ["All", "Label A", "Label B"]
-        )
-        self.assertTrue(choices[0]["selected"])
-        self.assertFalse(choices[1]["selected"])
-        self.assertFalse(choices[2]["selected"])
+        with self.subTest("multiple selection marks every selected key"):
+            filter_instance = self._build(
+                parameter_name="x",
+                used_parameters={"x": "a,b"},
+                multiple=True,
+                lookup_choices=[("a", "Label A"), ("b", "Label B"), ("c", "Label C")],
+            )
+            choices = list(filter_instance.choices(_FakeChangeList()))
+            self.assertEqual(
+                [choice["selected"] for choice in choices], [False, True, True, False]
+            )
 
     def test_get_async_options_is_abstract(self):
         filter_instance = self._build()
@@ -499,6 +586,56 @@ class ForeignKeyFilterTests(TestCase):
                 (str(author.pk), "Tolkien")
             ]
 
+    def test_multiple_selection(self):
+        rowling = Author.objects.create(name="Rowling")
+        tolkien = Author.objects.create(name="Tolkien")
+        Book.objects.create(title="HP", author=rowling)
+        Book.objects.create(title="LOTR", author=tolkien)
+        Book.objects.create(title="Solo", author=None)
+
+        with self.subTest("sync queryset filters by several selected authors"):
+            request = RequestFactory().get(
+                "/admin/tests/book/",
+                {"author": f"{rowling.pk},{tolkien.pk}"},
+            )
+            filter_instance = MultipleAuthorFilter(
+                request,
+                {"author": [f"{rowling.pk},{tolkien.pk}"]},
+                Book,
+                admin.site._registry[Book],
+            )
+            result = filter_instance.queryset(request, Book.objects.all())
+            assert set(result.values_list("title", flat=True)) == {"HP", "LOTR"}
+
+        with self.subTest("async get_async_options omits the All option"):
+            request = RequestFactory().get("/admin/")
+            filter_instance = MultipleAsyncAuthorFilter(
+                request, {}, Book, admin.site._registry[Book]
+            )
+            options = filter_instance.get_async_options(
+                RequestFactory().get("/api/"), ""
+            )
+            assert (filter_instance.all_value, "All") not in options
+            assert (str(rowling.pk), "Rowling") in options
+            assert (str(tolkien.pk), "Tolkien") in options
+
+        with self.subTest("async lookups reflects every selected instance"):
+            request = RequestFactory().get(
+                "/admin/tests/book/",
+                {"author": f"{rowling.pk},{tolkien.pk}"},
+            )
+            filter_instance = MultipleAsyncAuthorFilter(
+                request,
+                {"author": [f"{rowling.pk},{tolkien.pk}"]},
+                Book,
+                admin.site._registry[Book],
+            )
+            options = filter_instance.lookups(request, admin.site._registry[Book])
+            assert set(options) == {
+                (str(rowling.pk), "Rowling"),
+                (str(tolkien.pk), "Tolkien"),
+            }
+
     def test_queryset_filters_by_selected_author(self):
         factory = RequestFactory()
         rowling = Author.objects.create(name="Rowling")
@@ -544,6 +681,34 @@ class ForeignKeyFilterTests(TestCase):
         assert 'data-parameter-name="author"' in html
         assert 'data-autocomplete="true"' in html
         assert "Rowling" in html
+
+    def test_template_renders_multiple_select_markup(self):
+        author = Author.objects.create(name="Rowling")
+        Book.objects.create(title="Harry Potter", author=author)
+
+        request = RequestFactory().get("/admin/tests/book/", {"author": str(author.pk)})
+        filter_instance = MultipleAuthorFilter(
+            request, {"author": [str(author.pk)]}, Book, admin.site._registry[Book]
+        )
+
+        html = render_to_string(
+            filter_instance.template,
+            {
+                "spec": filter_instance,
+                "title": filter_instance.title,
+                "choices": list(filter_instance.choices(_FakeChangeList())),
+            },
+            request=request,
+        )
+
+        select_tag = html[
+            html.index("<select") : html.index(">", html.index("<select"))
+        ]
+        assert re.search(r"(?<!-)\bmultiple\b(?!-)", select_tag)
+        assert 'data-multiple="true"' in html
+        assert 'data-multiple-separator=","' in html
+        assert f'value="{author.pk}"' in html
+        assert "All</option>" not in html
 
     def test_missing_model_is_rejected_when_not_inferable(self):
         class InvalidFilter(ForeignKeyFilter):
@@ -879,3 +1044,40 @@ class ChoiceFilterTests(TestCase):
             assert filter_instance.lookups(request, admin.site._registry[Book]) == [
                 ("fiction", "Fiction")
             ]
+
+    def test_multiple_selection(self):
+        Book.objects.create(title="Dune", genre="fiction")
+        Book.objects.create(title="Cosmos", genre="poetry")
+
+        with self.subTest("queryset filters by several selected genres"):
+            request = RequestFactory().get(
+                "/admin/tests/book/", {"genre": "fiction,poetry"}
+            )
+            filter_instance = self._build_filter(
+                MultipleGenreFilter, request, {"genre": ["fiction,poetry"]}
+            )
+            result = filter_instance.queryset(request, Book.objects.all())
+            assert set(result.values_list("title", flat=True)) == {"Dune", "Cosmos"}
+
+        with self.subTest("get_async_options omits the All option"):
+            request = RequestFactory().get("/admin/")
+            filter_instance = self._build_filter(MultipleGenreFilter, request)
+            options = filter_instance.get_async_options(
+                RequestFactory().get("/api/"), ""
+            )
+            assert (filter_instance.all_value, "All") not in options
+            assert ("fiction", "Fiction") in options
+
+        with self.subTest("async lookups reflects every selected option"):
+            request = RequestFactory().get(
+                "/admin/tests/book/", {"genre": "fiction,poetry"}
+            )
+            filter_instance = self._build_filter(
+                MultipleAsyncGenreFilter, request, {"genre": ["fiction,poetry"]}
+            )
+            options = filter_instance.lookups(request, admin.site._registry[Book])
+            assert set(options) == {
+                ("fiction", "Fiction"),
+                ("poetry", "Poetry"),
+                (filter_instance.null_value, "-"),
+            }
