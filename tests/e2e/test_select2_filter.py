@@ -8,10 +8,7 @@ from tests.testapp.models import Author, Book
 pytestmark = pytest.mark.django_db(transaction=True)
 
 
-def _login(page: Page, live_server, django_user_model) -> None:
-    django_user_model.objects.create_superuser(
-        username="admin", email="admin@example.com", password="password"
-    )
+def _login(page: Page, live_server, admin_user) -> None:
     page.goto(f"{live_server.url}/admin/login/")
     page.fill("#id_username", "admin")
     page.fill("#id_password", "password")
@@ -19,15 +16,13 @@ def _login(page: Page, live_server, django_user_model) -> None:
     expect(page).to_have_url(f"{live_server.url}/admin/")
 
 
-def test_sync_filter_navigates_and_filters_results(
-    live_server, page, django_user_model
-):
+def test_sync_filter_navigates_and_filters_results(live_server, page, admin_user):
     rowling = Author.objects.create(name="Rowling")
     tolkien = Author.objects.create(name="Tolkien")
     Book.objects.create(title="Harry Potter", author=rowling)
     Book.objects.create(title="The Hobbit", author=tolkien)
 
-    _login(page, live_server, django_user_model)
+    _login(page, live_server, admin_user)
     page.goto(f"{live_server.url}/e2e-admin/testapp/book/")
 
     page.locator("select.django-admin-select-filter + span .select2-selection").click()
@@ -43,14 +38,14 @@ def test_sync_filter_navigates_and_filters_results(
 
 
 def test_async_filter_loads_options_over_ajax_and_filters(
-    live_server, page, django_user_model
+    live_server, page, admin_user
 ):
     rowling = Author.objects.create(name="Rowling")
     tolkien = Author.objects.create(name="Tolkien")
     Book.objects.create(title="Harry Potter", author=rowling)
     Book.objects.create(title="The Hobbit", author=tolkien)
 
-    _login(page, live_server, django_user_model)
+    _login(page, live_server, admin_user)
     page.goto(f"{live_server.url}/admin/testapp/book/")
 
     async_select = page.locator(
