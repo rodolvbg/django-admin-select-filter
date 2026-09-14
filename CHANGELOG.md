@@ -30,3 +30,6 @@
   directly from `django_admin_select_filter` (e.g.
   `from django_admin_select_filter import ForeignKeyFilter`), not just from
   `django_admin_select_filter.filters`.
+- Fixed `Select2FilterOptionsView` returning 404 when the target model was
+  registered on a project's own `AdminSite` instead of the default
+  `django.contrib.admin.site`. It now checks every registered `AdminSite`.

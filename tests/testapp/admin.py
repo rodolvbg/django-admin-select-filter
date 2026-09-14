@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from django_admin_select_filter.filters import ChoiceFilter, ForeignKeyFilter
-from tests.testapp.models import Author, Book
+from tests.testapp.models import Author, Book, Country
 
 
 class AuthorFilter(ForeignKeyFilter):
@@ -100,6 +100,13 @@ class NonRelationChainFilter(ChoiceFilter):
     filter_only_used_values = False
 
 
+class AsyncCountryNameFilter(ChoiceFilter):
+    parameter_name = "name"
+    options = [("Chile", "Chile"), ("Peru", "Peru")]
+    async_call = True
+    filter_only_used_values = False
+
+
 @admin.register(Author)
 class AuthorAdmin(admin.ModelAdmin):
     search_fields = ["name"]
@@ -130,3 +137,11 @@ class E2EAuthorAdmin(admin.ModelAdmin):
 @admin.register(Book, site=e2e_admin_site)
 class E2EBookAdmin(admin.ModelAdmin):
     list_filter = [AuthorFilter]
+
+
+# Registered only on this custom site (never on the default django.contrib.admin
+# site), to prove the async options view finds a model regardless of which
+# AdminSite it's registered on.
+@admin.register(Country, site=e2e_admin_site)
+class E2ECountryAdmin(admin.ModelAdmin):
+    list_filter = [AsyncCountryNameFilter]

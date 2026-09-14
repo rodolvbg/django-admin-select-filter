@@ -34,7 +34,9 @@ assets on demand, so no extra JS dependency is required. Make sure
 The endpoint only serves filters with `async_call = True` and requires the
 requesting user to have view permission on the target model (checked via
 `ModelAdmin.has_view_permission`) — anonymous or unprivileged requests get a
-403, and a `parameter_name` matching a non-async filter gets a 404.
+403, and a `parameter_name` matching a non-async filter gets a 404. It looks
+the model up across every registered `AdminSite` (not just the default
+`django.contrib.admin.site`), so a project using its own `AdminSite` works too.
 
 ## Usage
 
