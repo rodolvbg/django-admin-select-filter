@@ -23,6 +23,25 @@ class BaseSelectFilter(AdminSelectFilterMixin, SimpleListFilter):
     only need to supply the available options (see ``get_options``,
     ``get_async_options`` and ``lookups`` on :class:`ForeignKeyFilter` and
     :class:`ChoiceFilter` for the two supported shapes).
+
+    ``parameter_name``
+        Lookup applied to the changelist queryset, such as ``"group"`` or
+        ``"groups"``. Required.
+    ``filter_only_used_values``
+        When true, only expose relations already present in the current
+        ModelAdmin queryset. It defaults to true.
+    ``async_call``
+        When true, defer loading options until Select2 requests them through
+        the API. It defaults to false.
+    ``autocomplete``
+        When true, disable the browser's native autocomplete suggestions on
+        Select2's search input. It defaults to true.
+    ``nullable``
+        Controls whether the ``-`` option is available. When left as ``None``,
+        the value is inferred from the configured model field.
+    ``title``
+        Label shown by Django above the filter. By default it uses the related
+        model admin's plural verbose name.
     """
 
     filter_only_used_values: ClassVar[bool] = True
@@ -157,29 +176,11 @@ class ForeignKeyFilter(BaseSelectFilter):
 
     ``model``
         Related model whose instances become the available options. Required.
-    ``parameter_name``
-        Lookup applied to the changelist queryset, such as ``"group"`` or
-        ``"groups"``. Required.
     ``ordering``
         Field names used to order the related instances.
     ``only``
         Related-model fields loaded by the options queryset. Include every
         field needed by the model's string representation.
-    ``filter_only_used_values``
-        When true, only expose relations already present in the current
-        ModelAdmin queryset. It defaults to true.
-    ``async_call``
-        When true, defer loading options until Select2 requests them through
-        the API. It defaults to false.
-    ``autocomplete``
-        When true, disable the browser's native autocomplete suggestions on
-        Select2's search input. It defaults to true.
-    ``nullable``
-        Controls whether the ``-`` option is available. When left as ``None``,
-        the value is inferred from the configured model field.
-    ``title``
-        Label shown by Django above the filter. By default it uses the related
-        model admin's plural verbose name.
 
     ``all_value`` and ``null_value`` are reserved values used by the async API
     for the translated “All” option and the null option, respectively. They can
@@ -300,23 +301,6 @@ class ChoiceFilter(BaseSelectFilter):
         Explicit ``(value, label)`` pairs to offer. When left unset, options
         are read from the configured field's ``choices`` (e.g. a
         ``ChoiceField``); configuring this is required if the field has none.
-    ``parameter_name``
-        Lookup applied to the changelist queryset. Required.
-    ``filter_only_used_values``
-        When true, only expose values already present in the current
-        ModelAdmin queryset. It defaults to true.
-    ``async_call``
-        When true, defer loading options until Select2 requests them through
-        the API. It defaults to false.
-    ``autocomplete``
-        When true, disable the browser's native autocomplete suggestions on
-        Select2's search input. It defaults to true.
-    ``nullable``
-        Controls whether the ``-`` option is available. When left as ``None``,
-        the value is inferred from the configured model field.
-    ``title``
-        Label shown by Django above the filter. By default it uses the
-        configured field's verbose name.
 
     ``all_value`` and ``null_value`` are reserved values used by the async API
     for the translated “All” option and the null option, respectively. They can

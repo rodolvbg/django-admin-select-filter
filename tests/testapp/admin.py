@@ -55,6 +55,16 @@ class AllGenresFilter(GenreFilter):
     filter_only_used_values = False
 
 
+class FixedTitleGenreFilter(GenreFilter):
+    title = "Fixed title"
+
+
+class ExplicitOptionsMissingFieldFilter(ChoiceFilter):
+    parameter_name = "not_a_real_field"
+    options = [("a", "A")]
+    filter_only_used_values = False
+
+
 @admin.register(Author)
 class AuthorAdmin(admin.ModelAdmin):
     search_fields = ["name"]
