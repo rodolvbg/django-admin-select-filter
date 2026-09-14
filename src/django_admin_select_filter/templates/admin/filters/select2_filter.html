@@ -1,0 +1,34 @@
+{% load i18n static %}
+<link rel="stylesheet" href="{% static 'admin/css/vendor/select2/select2.css' %}">
+<link rel="stylesheet" href="{% static 'admin_select_filter/css/admin_select2_filter.css' %}">
+<h3>{% blocktranslate with filter_title=title %} By {{ filter_title }} {% endblocktranslate %}</h3>
+<ul>
+  <li>
+    <select
+      class="admin-select2-filter"
+      aria-label="{{ title }}"
+      data-placeholder="{% translate 'Search' %}"
+      data-jquery-url="{% static 'admin/js/vendor/jquery/jquery.min.js' %}"
+      data-jquery-init-url="{% static 'admin/js/jquery.init.js' %}"
+      data-select2-url="{% static 'admin/js/vendor/select2/select2.full.js' %}"
+      data-async-call="{{ spec.async_call|yesno:'true,false' }}"
+      data-api-url="{% url 'admin_select_filter:options' %}"
+      data-app-label="{{ spec.admin_app_label }}"
+      data-model-name="{{ spec.admin_model_name }}"
+      data-parameter-name="{{ spec.parameter_name }}"
+      data-facets="{{ spec.facets|yesno:'true,false' }}"
+      data-all-value="{{ spec.all_value }}"
+    >
+      {% for choice in choices %}
+        <option
+          data-key="{{ choice.key }}"
+          value="{{ choice.query_string|iriencode }}"
+          {% if choice.selected %}selected{% endif %}
+        >
+          {{ choice.display }}
+        </option>
+      {% endfor %}
+    </select>
+  </li>
+</ul>
+<script type="module" src="{% static 'admin_select_filter/js/admin_select2_filter.js' %}"></script>
