@@ -41,7 +41,10 @@ django_admin_select_filter_path(route="custom-options/")
 The endpoint stays reversible as `admin_select_filter:options` either way —
 `django_admin_select_filter_path()` still namespaces it internally via
 `include()`, that's just no longer something you have to write yourself.
-Pass `route`, `view`, `name` or `as_view_kwargs` to customize it further.
+Pass `route`, `view`, `name` or `as_view_kwargs` to customize it further. If
+you pass a custom `name`, set `async_call_url` explicitly on every
+`async_call` filter to match it — filters resolve the default endpoint by
+its default name, and have no way to discover a custom one chosen here.
 
 Each `async_call` filter reads that shared endpoint through
 `BaseSelectFilter.async_call_url`, resolved automatically at request time via
@@ -75,6 +78,17 @@ requesting user to have view permission on the target model (checked via
 403, and a `parameter_name` matching a non-async filter gets a 404. It looks
 the model up across every registered `AdminSite` (not just the default
 `django.contrib.admin.site`), so a project using its own `AdminSite` works too.
+
+By default it does this by calling `get_list_filter()` on every matching
+`ModelAdmin` on every request. For a project with many admins or filters,
+pass `as_view_kwargs={"use_registry": True}` to
+`django_admin_select_filter_path()` instead: it resolves filters from a
+`{site: {app_label: {model_name: {parameter_name: filter}}}}` map built once
+and cached for the process's lifetime (admin registrations are static after
+startup), turning that per-request scan into a single dict lookup. The
+trade-off: it calls `get_list_filter(request=None)` while building the
+cache, so a `get_list_filter()` override that depends on the request isn't
+supported in this mode.
 
 ## Usage
 

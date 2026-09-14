@@ -49,4 +49,11 @@
   it's always correct regardless of the admin page it's rendered on and
   wherever that urlconf is mounted (a bare relative path there would resolve
   against the *current page*, not that mount point, and silently hit the
-  wrong URL). Set it explicitly on a filter to point it at a custom view.
+  wrong URL). Set it explicitly on a filter to point it at a custom view — or
+  to match a custom `name=` passed to `django_admin_select_filter_path()`,
+  which filters otherwise have no way to discover.
+- Added `Select2FilterOptionsView.use_registry`: enabled via
+  `as_view_kwargs={"use_registry": True}`, it resolves the matching filter
+  from a `{site: {app_label: {model_name: {parameter_name: filter}}}}` map
+  built once and cached for the process's lifetime, instead of calling
+  `get_list_filter()` on every registered `ModelAdmin` on every request.

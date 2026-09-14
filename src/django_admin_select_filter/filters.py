@@ -12,6 +12,12 @@ from django.urls import reverse
 from django.utils.functional import cached_property
 from django.utils.translation import gettext
 
+# The default ``name`` django_admin_select_filter_path() registers its route
+# under. Imported from there (rather than declared alongside it) so filters
+# and urls.py share one source of truth without a circular import — urls.py
+# already depends on views.py, which depends on this module.
+ASYNC_CALL_URL_NAME = "options"
+
 
 class BaseSelectFilter(SimpleListFilter):
     """Shared plumbing for the project's Select2-powered admin list filters.
@@ -53,14 +59,18 @@ class BaseSelectFilter(SimpleListFilter):
     ``async_call_url``
         URL the Select2 widget's JS fetches options from when ``async_call``
         is true. Left as ``None`` (the default), it resolves to
-        ``reverse("admin_select_filter:options")`` — the shared endpoint
-        registered via ``django_admin_select_filter_path()``. ``reverse()``
-        is what makes this work correctly regardless of the admin page the
-        filter is rendered on and wherever that route is actually mounted —
-        a bare path segment like ``"options/"`` would resolve relative to
-        the *current page*, not that mount point, and silently hit the wrong
-        URL. Set it explicitly on a filter only to point it at a genuinely
-        different, custom view.
+        ``reverse(f"admin_select_filter:{ASYNC_CALL_URL_NAME}")`` — the
+        shared endpoint registered via ``django_admin_select_filter_path()``.
+        ``reverse()`` is what makes this work correctly regardless of the
+        admin page the filter is rendered on and wherever that route is
+        actually mounted — a bare path segment like ``"options/"`` would
+        resolve relative to the *current page*, not that mount point, and
+        silently hit the wrong URL. If you pass a custom ``name=`` to
+        ``django_admin_select_filter_path()``, set ``async_call_url``
+        explicitly on every ``async_call`` filter to match — there's no way
+        for a filter to otherwise discover which name was used for the
+        specific route it should call. Also set it explicitly to point a
+        filter at a genuinely different, custom view.
     """
 
     filter_only_used_values: ClassVar[bool] = True
@@ -94,7 +104,7 @@ class BaseSelectFilter(SimpleListFilter):
         ) and self._has_null_option()
         self.facets = self.request.GET.get("_facets") == "True"
         if self.async_call and self.async_call_url is None:
-            self.async_call_url = reverse("admin_select_filter:options")
+            self.async_call_url = reverse(f"admin_select_filter:{ASYNC_CALL_URL_NAME}")
 
         super().__init__(request, params, admin_model, model_admin)
 
