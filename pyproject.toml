@@ -4,7 +4,7 @@ requires = [ "hatchling" ]
 
 [project]
 name = "django-admin-select-filter"
-version = "0.1.0"
+version = "0.1.1"
 description = "Select2-powered admin list filters for Django, including an async foreign-key filter."
 readme = "README.md"
 license = "MIT"
