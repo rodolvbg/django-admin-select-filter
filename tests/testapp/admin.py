@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from django_admin_select_filter.filters import ForeignKeyFilter
+from django_admin_select_filter.filters import ChoiceFilter, ForeignKeyFilter
 from tests.testapp.models import Author, Book
 
 
@@ -38,6 +38,23 @@ class MissingFieldFilter(ForeignKeyFilter):
     filter_only_used_values = False
 
 
+class GenreFilter(ChoiceFilter):
+    parameter_name = "genre"
+
+
+class AsyncGenreFilter(GenreFilter):
+    async_call = True
+
+
+class ExplicitOptionsGenreFilter(ChoiceFilter):
+    parameter_name = "genre"
+    options = [("fiction", "Fiction"), ("poetry", "Poetry")]
+
+
+class AllGenresFilter(GenreFilter):
+    filter_only_used_values = False
+
+
 @admin.register(Author)
 class AuthorAdmin(admin.ModelAdmin):
     search_fields = ["name"]
@@ -45,7 +62,13 @@ class AuthorAdmin(admin.ModelAdmin):
 
 @admin.register(Book)
 class BookAdmin(admin.ModelAdmin):
-    list_filter = [MissingFieldFilter, AuthorFilter, AsyncAuthorFilter]
+    list_filter = [
+        MissingFieldFilter,
+        AuthorFilter,
+        AsyncAuthorFilter,
+        GenreFilter,
+        AsyncGenreFilter,
+    ]
 
 
 # A second, uncluttered admin site for browser (Playwright) tests: BookAdmin

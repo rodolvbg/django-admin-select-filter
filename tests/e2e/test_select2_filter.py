@@ -54,7 +54,8 @@ def test_async_filter_loads_options_over_ajax_and_filters(
     page.goto(f"{live_server.url}/admin/testapp/book/")
 
     async_select = page.locator(
-        'select.django-admin-select-filter[data-async-call="true"]'
+        "select.django-admin-select-filter"
+        '[data-async-call="true"][data-parameter-name="author"]'
     )
     async_select.locator("xpath=following-sibling::span[1]").locator(
         ".select2-selection"

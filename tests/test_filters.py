@@ -3,13 +3,17 @@ from django.contrib import admin
 from django.template.loader import render_to_string
 from django.test import RequestFactory
 
-from django_admin_select_filter.filters import ForeignKeyFilter
+from django_admin_select_filter.filters import ChoiceFilter, ForeignKeyFilter
 from tests.testapp.admin import (
+    AllGenresFilter,
     AllNullableAuthorFilter,
     AsyncAuthorFilter,
+    AsyncGenreFilter,
     AuthorFilter,
     ExplicitNullableAuthorFilter,
+    ExplicitOptionsGenreFilter,
     FixedTitleAuthorFilter,
+    GenreFilter,
     MissingFieldFilter,
     OnlyNameAuthorFilter,
 )
@@ -299,3 +303,132 @@ def test_has_output_false_when_no_options_available():
     filter_instance = _build_filter(request)
 
     assert filter_instance.has_output() is False
+
+
+def _build_genre_filter(filter_class, request, params=None):
+    model_admin = admin.site._registry[Book]
+    return filter_class(request, params or {}, Book, model_admin)
+
+
+def test_choice_filter_derives_options_from_field_choices():
+    request = RequestFactory().get("/admin/")
+    filter_instance = _build_genre_filter(AllGenresFilter, request)
+
+    assert filter_instance.options == [
+        ("fiction", "Fiction"),
+        ("nonfiction", "Non-fiction"),
+        ("poetry", "Poetry"),
+    ]
+    assert filter_instance.title == "genre"
+
+
+def test_choice_filter_requires_parameter_name():
+    class InvalidFilter(ChoiceFilter):
+        pass
+
+    with pytest.raises(TypeError, match="parameter_name must be configured"):
+        InvalidFilter(
+            RequestFactory().get("/admin/"), {}, Book, admin.site._registry[Book]
+        )
+
+
+def test_choice_filter_requires_options_or_field_choices():
+    class InvalidFilter(ChoiceFilter):
+        parameter_name = "title"
+
+    with pytest.raises(TypeError, match="options must be configured"):
+        InvalidFilter(
+            RequestFactory().get("/admin/"), {}, Book, admin.site._registry[Book]
+        )
+
+
+def test_choice_filter_accepts_explicit_options():
+    request = RequestFactory().get("/admin/")
+    filter_instance = _build_genre_filter(ExplicitOptionsGenreFilter, request)
+
+    assert filter_instance.options == [("fiction", "Fiction"), ("poetry", "Poetry")]
+
+
+def test_choice_filter_get_options_only_returns_used_values():
+    Book.objects.create(title="Dune", genre="fiction")
+
+    request = RequestFactory().get("/admin/")
+    filter_instance = _build_genre_filter(GenreFilter, request)
+
+    assert filter_instance.get_options() == [("fiction", "Fiction")]
+
+
+def test_choice_filter_get_options_without_used_filter_returns_all():
+    request = RequestFactory().get("/admin/")
+    filter_instance = _build_genre_filter(AllGenresFilter, request)
+
+    assert filter_instance.get_options() == [
+        ("fiction", "Fiction"),
+        ("nonfiction", "Non-fiction"),
+        ("poetry", "Poetry"),
+    ]
+
+
+def test_choice_filter_get_options_searches_by_label():
+    request = RequestFactory().get("/admin/")
+    filter_instance = _build_genre_filter(AllGenresFilter, request)
+
+    assert filter_instance.get_options(q="fic") == [
+        ("fiction", "Fiction"),
+        ("nonfiction", "Non-fiction"),
+    ]
+
+
+def test_choice_filter_queryset_filters_by_selected_genre():
+    Book.objects.create(title="Dune", genre="fiction")
+    Book.objects.create(title="Cosmos", genre="nonfiction")
+
+    request = RequestFactory().get("/admin/tests/book/", {"genre": "fiction"})
+    filter_instance = _build_genre_filter(GenreFilter, request, {"genre": ["fiction"]})
+
+    result = filter_instance.queryset(request, Book.objects.all())
+
+    assert list(result.values_list("title", flat=True)) == ["Dune"]
+
+
+def test_choice_filter_get_async_options_lists_all_and_selected():
+    Book.objects.create(title="Dune", genre="fiction")
+
+    request = RequestFactory().get("/admin/")
+    filter_instance = _build_genre_filter(GenreFilter, request)
+
+    options = filter_instance.get_async_options(RequestFactory().get("/api/"), "")
+
+    assert options == [
+        (filter_instance.all_value, "All"),
+        ("fiction", "Fiction"),
+    ]
+
+
+def test_choice_filter_sync_lookups_return_used_options():
+    Book.objects.create(title="Dune", genre="fiction")
+
+    request = RequestFactory().get("/admin/")
+    filter_instance = _build_genre_filter(GenreFilter, request)
+
+    assert filter_instance.lookups(request, admin.site._registry[Book]) == [
+        ("fiction", "Fiction")
+    ]
+
+
+def test_choice_filter_async_lookups_returns_empty_without_selection():
+    request = RequestFactory().get("/admin/tests/book/")
+    filter_instance = _build_genre_filter(AsyncGenreFilter, request)
+
+    assert filter_instance.lookups(request, admin.site._registry[Book]) == []
+
+
+def test_choice_filter_async_lookups_returns_selected_option():
+    request = RequestFactory().get("/admin/tests/book/", {"genre": "fiction"})
+    filter_instance = _build_genre_filter(
+        AsyncGenreFilter, request, {"genre": ["fiction"]}
+    )
+
+    assert filter_instance.lookups(request, admin.site._registry[Book]) == [
+        ("fiction", "Fiction")
+    ]

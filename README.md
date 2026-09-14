@@ -56,6 +56,32 @@ class BookAdmin(admin.ModelAdmin):
     list_filter = [AuthorFilter]
 ```
 
+For a field that isn't a relation — a `choices`-backed `CharField`/`IntegerField`,
+a `BooleanField`, or anything else with discrete values — use `ChoiceFilter`
+instead. It reads its options from the field's `choices` by default, or from an
+explicit `options` list:
+
+```python
+from django_admin_select_filter.filters import ChoiceFilter
+
+
+class GenreFilter(ChoiceFilter):
+    parameter_name = "genre"  # reads Book.genre.choices
+
+
+class StatusFilter(ChoiceFilter):
+    parameter_name = "status"
+    options = [("draft", "Draft"), ("published", "Published")]
+
+
+@admin.register(Book)
+class BookAdmin(admin.ModelAdmin):
+    list_filter = [AuthorFilter, GenreFilter]
+```
+
+Both filters share the same options: `filter_only_used_values`, `async_call`,
+`autocomplete`, `nullable` and `title`.
+
 ## Development
 
 With [uv](https://docs.astral.sh/uv/) (recommended):

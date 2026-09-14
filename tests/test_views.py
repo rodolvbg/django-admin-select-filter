@@ -102,3 +102,25 @@ def test_options_returns_select2_results(admin_client):
     results = response.json()["results"]
     assert results[0] == {"id": "__all__", "text": "All"}
     assert {"id": str(author.pk), "text": "Rowling (1)"} in results
+
+
+def test_options_returns_select2_results_for_choice_filter(admin_client):
+    Book.objects.create(title="Dune", genre="fiction")
+    url = reverse("admin_select_filter:options")
+
+    response = admin_client.get(
+        url,
+        {
+            "app_label": "testapp",
+            "model_name": "book",
+            "parameter_name": "genre",
+            "q": "Fic",
+        },
+    )
+
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert results == [
+        {"id": "__all__", "text": "All"},
+        {"id": "fiction", "text": "Fiction"},
+    ]

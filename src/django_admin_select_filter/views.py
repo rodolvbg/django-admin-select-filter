@@ -7,14 +7,14 @@ from django.contrib import admin
 from django.http import HttpRequest, JsonResponse
 from django.views import View
 
-from django_admin_select_filter.filters import ForeignKeyFilter
+from django_admin_select_filter.filters import BaseSelectFilter
 
 
 def _get_filter_class(
     model_admin: admin.ModelAdmin[Any],
     request: HttpRequest,
     parameter_name: str,
-) -> type[ForeignKeyFilter] | None:
+) -> type[BaseSelectFilter] | None:
     for configured_filter in model_admin.get_list_filter(request):
         filter_class: Any = (
             configured_filter[1]
@@ -23,7 +23,7 @@ def _get_filter_class(
         )
         if (
             isinstance(filter_class, type)
-            and issubclass(filter_class, ForeignKeyFilter)
+            and issubclass(filter_class, BaseSelectFilter)
             and filter_class.async_call
             and filter_class.parameter_name == parameter_name
         ):
