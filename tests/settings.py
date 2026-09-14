@@ -1,3 +1,10 @@
+import os
+
+# pytest-playwright's sync API leaves a background asyncio loop running in
+# this thread, which trips Django's async-safety guard during the one-time
+# test database setup (a plain sqlite DDL call, not actually unsafe here).
+os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "1")
+
 SECRET_KEY = "test-secret-key"
 DEBUG = True
 USE_TZ = True

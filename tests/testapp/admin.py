@@ -46,3 +46,19 @@ class AuthorAdmin(admin.ModelAdmin):
 @admin.register(Book)
 class BookAdmin(admin.ModelAdmin):
     list_filter = [MissingFieldFilter, AuthorFilter, AsyncAuthorFilter]
+
+
+# A second, uncluttered admin site for browser (Playwright) tests: BookAdmin
+# above stacks edge-case filters for coverage purposes, which makes DOM
+# selectors ambiguous for an end-to-end smoke test.
+e2e_admin_site = admin.AdminSite(name="e2e_admin")
+
+
+@admin.register(Author, site=e2e_admin_site)
+class E2EAuthorAdmin(admin.ModelAdmin):
+    search_fields = ["name"]
+
+
+@admin.register(Book, site=e2e_admin_site)
+class E2EBookAdmin(admin.ModelAdmin):
+    list_filter = [AuthorFilter]

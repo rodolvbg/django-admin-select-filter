@@ -62,6 +62,7 @@ With [uv](https://docs.astral.sh/uv/) (recommended):
 
 ```bash
 uv sync
+uv run playwright install --with-deps chromium
 npm install
 uv run pytest
 uv run pre-commit install
@@ -74,10 +75,17 @@ Without uv:
 
 ```bash
 pip install -e ".[test,dev]"
+playwright install --with-deps chromium
 npm install
 pytest
 pre-commit install
 ```
+
+`tests/e2e/` drives a real Django admin page in a headless browser
+(pytest-playwright) to check the Select2 widget actually renders and works —
+both the synchronous dropdown and the asynchronous one, which exercises the
+JS → `fetch` → view → DB round trip for real. It needs a browser installed
+once via `playwright install`.
 
 `pre-commit` runs ruff, mypy, django-upgrade, djade (template linting),
 pyproject-fmt, biome and vitest (for the bundled JS/CSS). The `mypy` hook
