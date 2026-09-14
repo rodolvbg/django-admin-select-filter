@@ -17,25 +17,31 @@ INSTALLED_APPS = [
 ]
 ```
 
-Wire the options endpoint (only needed for filters using `async_call = True`):
+Wire the options endpoint (only needed for filters using `async_call = True`)
+by dropping `django_admin_select_filter_path()` into your root `urlpatterns`
+— no `include()` needed:
 
 ```python
 # urls.py
+from django_admin_select_filter import django_admin_select_filter_path
+
 urlpatterns = [
     ...
-    path("admin/select-filter/", include("django_admin_select_filter.urls")),
+    django_admin_select_filter_path(),
 ]
 ```
 
-The sub-path after that prefix (`django_admin_select_filter/options/` by
-default) is itself configurable via the
-`DJANGO_ADMIN_SELECT_FILTERS_ASYNC_CALL_URL` setting, in case it collides
-with something else in your project:
+Its route defaults to `django_admin_select_filter/options/`; pass `route` in
+case it collides with something else in your project:
 
 ```python
-# settings.py
-DJANGO_ADMIN_SELECT_FILTERS_ASYNC_CALL_URL = "custom-options/"
+django_admin_select_filter_path(route="custom-options/")
 ```
+
+The endpoint stays reversible as `admin_select_filter:options` either way —
+`django_admin_select_filter_path()` still namespaces it internally via
+`include()`, that's just no longer something you have to write yourself.
+Pass `route`, `view`, `name` or `as_view_kwargs` to customize it further.
 
 Each `async_call` filter reads that shared endpoint through
 `BaseSelectFilter.async_call_url`, resolved automatically at request time via
@@ -49,14 +55,15 @@ class AuthorFilter(ForeignKeyFilter):
     async_call_url = "/api/custom-author-options/"
 ```
 
-If it shares a prefix with your admin mount (e.g. both under `admin/`), list
-this path **before** `path("admin/", admin.site.urls)`. Since Django 4.1,
-`AdminSite` registers a catch-all view (`AdminSite.final_catch_all_view`,
-enabled by default) that matches every otherwise-unmatched URL under its own
-prefix and raises `Http404` itself — so if the admin mount comes first, it
-swallows requests to this app's options endpoint before its URLs ever get a
-chance to match, and you'll see a 404 with a full HTML body (the admin's own
-"Page not found" page) instead of this app's JSON response.
+If its route shares a prefix with your admin mount (e.g. both under
+`admin/`), list `django_admin_select_filter_path()` **before**
+`path("admin/", admin.site.urls)`. Since Django 4.1, `AdminSite` registers a
+catch-all view (`AdminSite.final_catch_all_view`, enabled by default) that
+matches every otherwise-unmatched URL under its own prefix and raises
+`Http404` itself — so if the admin mount comes first, it swallows requests to
+this app's options endpoint before its URLs ever get a chance to match, and
+you'll see a 404 with a full HTML body (the admin's own "Page not found"
+page) instead of this app's JSON response.
 
 The filter template loads jQuery/Select2 from Django admin's bundled vendor
 assets on demand, so no extra JS dependency is required. Make sure

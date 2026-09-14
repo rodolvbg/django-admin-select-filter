@@ -55,7 +55,7 @@ def test_async_filter_loads_options_over_ajax_and_filters(
 
     search_box = page.locator(".select2-search__field")
     with page.expect_response(
-        lambda r: "/admin/select-filter/django_admin_select_filter/options/" in r.url
+        lambda r: "/django_admin_select_filter/options/" in r.url
     ):
         search_box.fill("Rowl")
 

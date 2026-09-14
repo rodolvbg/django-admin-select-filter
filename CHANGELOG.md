@@ -37,9 +37,12 @@
   search input and get a plain dropdown, for a short static option list.
 - Fixed dark-mode styling for `multiple = True`: the CSS only targeted
   Select2's single-selection markup, leaving the multi-select chips unstyled.
-- Added the `DJANGO_ADMIN_SELECT_FILTERS_ASYNC_CALL_URL` setting to configure
-  the options endpoint's URL path (defaults to
-  `"django_admin_select_filter/options/"`).
+- Replaced `django_admin_select_filter.urls`'s plain `urlpatterns` list with
+  `django_admin_select_filter_path()`, a function projects drop straight
+  into their own `urlpatterns` — no `include()` needed. It still namespaces
+  the route as `admin_select_filter:options` internally via `include()`, and
+  accepts `route` (defaults to `"django_admin_select_filter/options/"`),
+  `view`, `name` and `as_view_kwargs` to customize it.
 - Added `BaseSelectFilter.async_call_url`: the JS now reads the async
   endpoint from this per-filter attribute. Left unset (the default), it
   resolves via `reverse("admin_select_filter:options")` at request time, so

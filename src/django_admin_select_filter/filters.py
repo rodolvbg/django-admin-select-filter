@@ -54,14 +54,13 @@ class BaseSelectFilter(SimpleListFilter):
         URL the Select2 widget's JS fetches options from when ``async_call``
         is true. Left as ``None`` (the default), it resolves to
         ``reverse("admin_select_filter:options")`` — the shared endpoint
-        ``django_admin_select_filter.urls`` registers (its own path
-        configurable via the ``DJANGO_ADMIN_SELECT_FILTERS_ASYNC_CALL_URL``
-        setting). ``reverse()`` is what makes this work correctly regardless
-        of the admin page the filter is rendered on and wherever that
-        urlconf is actually mounted — a bare path segment like ``"options/"``
-        would resolve relative to the *current page*, not that mount point,
-        and silently hit the wrong URL. Set it explicitly on a filter only to
-        point it at a genuinely different, custom view.
+        registered via ``django_admin_select_filter_path()``. ``reverse()``
+        is what makes this work correctly regardless of the admin page the
+        filter is rendered on and wherever that route is actually mounted —
+        a bare path segment like ``"options/"`` would resolve relative to
+        the *current page*, not that mount point, and silently hit the wrong
+        URL. Set it explicitly on a filter only to point it at a genuinely
+        different, custom view.
     """
 
     filter_only_used_values: ClassVar[bool] = True
