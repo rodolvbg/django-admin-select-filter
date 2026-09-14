@@ -17,6 +17,6 @@
   into `admin_select_filter/filters/`, namespaced under the app's own label
   (matching the existing static files and URL namespace) instead of a path
   other packages could collide with. Split it into a
-  `select2_filter_base.html` with the shared markup and blocks, and a
+  `base.html` with the shared markup and blocks, and a
   `foreign_key_filter.html`/`choice_filter.html` pair that each extend it —
   `ForeignKeyFilter` and `ChoiceFilter` now set their own `template`.
