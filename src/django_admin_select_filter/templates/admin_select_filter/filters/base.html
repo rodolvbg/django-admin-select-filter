@@ -8,7 +8,6 @@
     <select
       class="django-admin-select-filter"
       aria-label="{{ title }}"
-      {% if spec.multiple %}multiple{% endif %}
       data-placeholder="{% translate 'Search' %}"
       data-jquery-url="{% static 'admin/js/vendor/jquery/jquery.min.js' %}"
       data-jquery-init-url="{% static 'admin/js/jquery.init.js' %}"
@@ -24,6 +23,7 @@
         data-all-value="{{ spec.all_value }}"
       {% endif %}
       {% if spec.multiple %}
+        multiple
         data-multiple="true"
         data-multiple-separator="{{ spec.multiple_separator }}"
       {% endif %}
