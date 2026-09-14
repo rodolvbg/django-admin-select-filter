@@ -7,7 +7,7 @@ from tests.testapp.models import Author, Book
 pytestmark = pytest.mark.django_db
 
 
-class TestSelect2FilterOptionsView:
+class Select2FilterOptionsViewTests:
     def test_options_requires_all_parameters(self):
         client = Client()
         url = reverse("admin_select_filter:options")

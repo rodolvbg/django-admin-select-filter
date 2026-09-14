@@ -1,7 +1,7 @@
 import pytest
 from django.contrib import admin
 from django.template.loader import render_to_string
-from django.test import RequestFactory
+from django.test import RequestFactory, TestCase
 
 from django_admin_select_filter.filters import (
     BaseSelectFilter,
@@ -38,15 +38,291 @@ class _FakeChangeList:
         return "?author=1"
 
 
-class TestBaseSelectFilter:
-    def test_get_async_options_is_abstract(self):
-        filter_instance = BaseSelectFilter.__new__(BaseSelectFilter)
+class _FakeModelAdmin:
+    def __init__(self, queryset):
+        self.queryset = queryset
+        self.calls = 0
 
-        with pytest.raises(NotImplementedError):
+    def get_queryset(self, request):
+        self.calls += 1
+        return self.queryset
+
+
+class BaseSelectFilterTests(TestCase):
+    def _build(self, **attrs):
+        filter_instance = BaseSelectFilter.__new__(BaseSelectFilter)
+        filter_instance.all_value = "__all__"
+        filter_instance.null_value = "__null__"
+        filter_instance.filter_only_used_values = True
+        filter_instance.async_call = False
+        filter_instance.nullable = None
+        filter_instance.parameter_name = None
+        filter_instance.used_parameters = {}
+        for name, value in attrs.items():
+            setattr(filter_instance, name, value)
+        return filter_instance
+
+    def test_model_admin_queryset_caches_the_admin_queryset(self):
+        model_admin = _FakeModelAdmin(Book.objects.all())
+        filter_instance = self._build(
+            model_admin=model_admin, request=RequestFactory().get("/admin/")
+        )
+
+        first = filter_instance.model_admin_queryset
+        second = filter_instance.model_admin_queryset
+
+        self.assertIs(first, second)
+        self.assertEqual(model_admin.calls, 1)
+
+    def test__is_nullable(self):
+        cases = {
+            "nullable field matched by name": ("author", True),
+            "non-nullable field matched by name": ("title", False),
+            "nullable field matched by attname": ("author_id", True),
+            "field that doesn't exist": ("does_not_exist", False),
+        }
+        filter_instance = self._build()
+        for description, (parameter_name, expected) in cases.items():
+            with self.subTest(description):
+                filter_instance.parameter_name = parameter_name
+                self.assertIs(filter_instance._is_nullable(Book), expected)
+
+    def test__has_null_option(self):
+        author = Author.objects.create(name="Rowling")
+        Book.objects.create(title="HP", author=author, genre="fiction")
+        orphan_queryset = _FakeModelAdmin(Book.objects.filter(author=None))
+        populated_queryset = _FakeModelAdmin(Book.objects.filter(author=author))
+        request = RequestFactory().get("/admin/")
+
+        with self.subTest("not nullable"):
+            filter_instance = self._build(
+                nullable=False,
+                parameter_name="author",
+                model_admin=orphan_queryset,
+                request=request,
+            )
+            self.assertFalse(filter_instance._has_null_option())
+
+        with self.subTest("nullable but no parameter_name"):
+            filter_instance = self._build(
+                nullable=True,
+                parameter_name=None,
+                model_admin=orphan_queryset,
+                request=request,
+            )
+            self.assertFalse(filter_instance._has_null_option())
+
+        with self.subTest("nullable, all values shown regardless of usage"):
+            filter_instance = self._build(
+                nullable=True,
+                parameter_name="author",
+                filter_only_used_values=False,
+                model_admin=populated_queryset,
+                request=request,
+            )
+            self.assertTrue(filter_instance._has_null_option())
+
+        with self.subTest("nullable, used values only, null row exists"):
+            Book.objects.create(title="Orphan", author=None)
+            filter_instance = self._build(
+                nullable=True,
+                parameter_name="author",
+                filter_only_used_values=True,
+                model_admin=orphan_queryset,
+                request=request,
+            )
+            self.assertTrue(filter_instance._has_null_option())
+
+        with self.subTest("nullable, used values only, no null row"):
+            filter_instance = self._build(
+                nullable=True,
+                parameter_name="author",
+                filter_only_used_values=True,
+                model_admin=populated_queryset,
+                request=request,
+            )
+            self.assertFalse(filter_instance._has_null_option())
+
+    def test__resolve_field(self):
+        filter_instance = self._build()
+
+        with self.subTest("no parameter_name"):
+            filter_instance.parameter_name = None
+            self.assertIsNone(filter_instance._resolve_field(Book))
+
+        with self.subTest("single segment, valid field"):
+            filter_instance.parameter_name = "author"
+            field = filter_instance._resolve_field(Book)
+            assert field is not None
+            self.assertEqual(field.name, "author")
+
+        with self.subTest("single segment, unknown field"):
+            filter_instance.parameter_name = "does_not_exist"
+            self.assertIsNone(filter_instance._resolve_field(Book))
+
+        with self.subTest("nested, valid relation chain"):
+            filter_instance.parameter_name = "author__country"
+            field = filter_instance._resolve_field(Book)
+            assert field is not None
+            self.assertEqual(field.name, "country")
+
+        with self.subTest("nested, unknown middle segment"):
+            filter_instance.parameter_name = "bogus__country"
+            self.assertIsNone(filter_instance._resolve_field(Book))
+
+        with self.subTest("nested, non-relation middle segment"):
+            filter_instance.parameter_name = "title__country"
+            self.assertIsNone(filter_instance._resolve_field(Book))
+
+        with self.subTest("nested, unknown final segment"):
+            filter_instance.parameter_name = "author__does_not_exist"
+            self.assertIsNone(filter_instance._resolve_field(Book))
+
+    def test__get_option_facet_counts(self):
+        Book.objects.create(title="A", genre="fiction")
+        Book.objects.create(title="B", genre="fiction")
+        Book.objects.create(title="C", genre="poetry")
+        Book.objects.create(title="D", genre=None)
+        model_admin = admin.site._registry[Book]
+        request = RequestFactory().get("/admin/")
+
+        with self.subTest("no parameter_name"):
+            filter_instance = self._build(
+                parameter_name=None, model_admin=model_admin, request=request
+            )
+            self.assertEqual(filter_instance._get_option_facet_counts(), {})
+
+        with self.subTest("grouped counts, including null"):
+            filter_instance = self._build(
+                parameter_name="genre", model_admin=model_admin, request=request
+            )
+            self.assertEqual(
+                filter_instance._get_option_facet_counts(),
+                {"fiction": 2, "poetry": 1, filter_instance.null_value: 1},
+            )
+
+    def test__build_async_options(self):
+        author = Author.objects.create(name="Rowling")
+        Book.objects.create(title="HP", author=author)
+        Book.objects.create(title="Orphan", author=None)
+        model_admin = admin.site._registry[Book]
+        items = [(str(author.pk), "Rowling")]
+
+        with self.subTest("plain, no null option, no facets"):
+            filter_instance = self._build(
+                nullable=False,
+                parameter_name="author",
+                model_admin=model_admin,
+                request=RequestFactory().get("/admin/"),
+            )
+            options = filter_instance._build_async_options(
+                RequestFactory().get("/api/"), items
+            )
+            self.assertEqual(options, [("__all__", "All"), *items])
+
+        with self.subTest("null option appended"):
+            filter_instance = self._build(
+                nullable=True,
+                parameter_name="author",
+                filter_only_used_values=False,
+                model_admin=model_admin,
+                request=RequestFactory().get("/admin/"),
+            )
+            options = filter_instance._build_async_options(
+                RequestFactory().get("/api/"), items
+            )
+            self.assertEqual(options, [("__all__", "All"), *items, ("__null__", "-")])
+
+        with self.subTest("facet counts applied to every non-All option"):
+            filter_instance = self._build(
+                nullable=True,
+                parameter_name="author",
+                filter_only_used_values=False,
+                model_admin=model_admin,
+                request=RequestFactory().get("/admin/"),
+            )
+            options = filter_instance._build_async_options(
+                RequestFactory().get("/api/", {"facets": "true"}), items
+            )
+            self.assertEqual(
+                options,
+                [
+                    ("__all__", "All"),
+                    (str(author.pk), "Rowling (1)"),
+                    ("__null__", "- (1)"),
+                ],
+            )
+
+    def test_has_output(self):
+        with self.subTest("async filter always has output"):
+            filter_instance = self._build(async_call=True, lookup_choices=[])
+            self.assertTrue(filter_instance.has_output())
+
+        with self.subTest("sync filter with lookup choices"):
+            filter_instance = self._build(async_call=False, lookup_choices=[("a", "A")])
+            self.assertTrue(filter_instance.has_output())
+
+        with self.subTest("sync filter without lookup choices"):
+            filter_instance = self._build(async_call=False, lookup_choices=[])
+            self.assertFalse(filter_instance.has_output())
+
+    def test_queryset(self):
+        Book.objects.create(title="Orphan", author=None)
+        author = Author.objects.create(name="Rowling")
+        Book.objects.create(title="HP", author=author)
+        request = RequestFactory().get("/admin/tests/book/")
+        all_books = Book.objects.all()
+
+        with self.subTest("no value selected"):
+            filter_instance = self._build(parameter_name="author", used_parameters={})
+            self.assertIs(filter_instance.queryset(request, all_books), all_books)
+
+        with self.subTest("no parameter_name configured"):
+            filter_instance = self._build(
+                parameter_name=None, used_parameters={"author": str(author.pk)}
+            )
+            self.assertIs(filter_instance.queryset(request, all_books), all_books)
+
+        with self.subTest("null value filters null relations"):
+            filter_instance = self._build(
+                parameter_name="author", used_parameters={"author": "__null__"}
+            )
+            result = filter_instance.queryset(request, all_books)
+            self.assertEqual(list(result.values_list("title", flat=True)), ["Orphan"])
+
+        with self.subTest("regular value filters by lookup"):
+            filter_instance = self._build(
+                parameter_name="author",
+                used_parameters={"author": str(author.pk)},
+            )
+            result = filter_instance.queryset(request, all_books)
+            self.assertEqual(list(result.values_list("title", flat=True)), ["HP"])
+
+    def test_choices(self):
+        filter_instance = self._build(
+            parameter_name="x",
+            used_parameters={},
+            lookup_choices=[("a", "Label A"), ("b", "Label B")],
+        )
+
+        choices = list(filter_instance.choices(_FakeChangeList()))
+
+        self.assertEqual([choice["key"] for choice in choices], ["", "a", "b"])
+        self.assertEqual(
+            [choice["display"] for choice in choices], ["All", "Label A", "Label B"]
+        )
+        self.assertTrue(choices[0]["selected"])
+        self.assertFalse(choices[1]["selected"])
+        self.assertFalse(choices[2]["selected"])
+
+    def test_get_async_options_is_abstract(self):
+        filter_instance = self._build()
+
+        with self.assertRaises(NotImplementedError):
             filter_instance.get_async_options(RequestFactory().get("/api/"), "")
 
 
-class TestForeignKeyFilter:
+class ForeignKeyFilterTests:
     def _build_filter(self, request, params=None):
         model_admin = admin.site._registry[Book]
         return AuthorFilter(request, params or {}, Book, model_admin)
@@ -358,7 +634,7 @@ class TestForeignKeyFilter:
         assert filter_instance.has_output() is False
 
 
-class TestChoiceFilter:
+class ChoiceFilterTests:
     def _build_filter(self, filter_class, request, params=None):
         model_admin = admin.site._registry[Book]
         return filter_class(request, params or {}, Book, model_admin)
