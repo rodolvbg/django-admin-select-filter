@@ -54,13 +54,6 @@ async function initializeFilters() {
 			options.minimumResultsForSearch = Infinity;
 		}
 		select.select2(options);
-		if (element.dataset.autocomplete === "true") {
-			select.on("select2:open", () => {
-				document
-					.querySelector(".select2-container--open .select2-search__field")
-					?.setAttribute("autocomplete", "off");
-			});
-		}
 		if (element.dataset.multiple === "true") {
 			select.on("select2:close", () => {
 				const values = [].concat(select.val() || []).filter(Boolean);

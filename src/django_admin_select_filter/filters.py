@@ -31,10 +31,6 @@ class BaseSelectFilter(SimpleListFilter):
     ``async_call``
         When true, defer loading options until Select2 requests them through
         the API. It defaults to false.
-    ``autocomplete``
-        When true, disable the browser's native autocomplete suggestions on
-        Select2's search input. It defaults to true. Unrelated to whether the
-        search input itself is shown — see ``searchable`` for that.
     ``searchable``
         When false, hide Select2's search input and behave like a plain
         dropdown. Best for a short, static option list. It defaults to true.
@@ -57,7 +53,6 @@ class BaseSelectFilter(SimpleListFilter):
 
     filter_only_used_values: ClassVar[bool] = True
     async_call: ClassVar[bool] = False
-    autocomplete: ClassVar[bool] = True
     searchable: ClassVar[bool] = True
     nullable: bool | None = None
     all_value: ClassVar[str] = "__all__"

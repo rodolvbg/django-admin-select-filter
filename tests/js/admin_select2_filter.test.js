@@ -11,7 +11,6 @@ function addFilter() {
       data-jquery-url="/jquery.js"
       data-jquery-init-url="/jquery.init.js"
       data-select2-url="/select2.js"
-      data-autocomplete="true"
     ></select>
   `;
 }
@@ -25,7 +24,6 @@ function addAsyncFilter() {
       data-jquery-init-url="/jquery.init.js"
       data-select2-url="/select2.js"
       data-async-call="true"
-      data-autocomplete="true"
       data-api-url="/admin/select-filter/options/"
       data-app-label="testapp"
       data-model-name="book"
@@ -44,7 +42,6 @@ function addMultipleFilter() {
       data-jquery-url="/jquery.js"
       data-jquery-init-url="/jquery.init.js"
       data-select2-url="/select2.js"
-      data-autocomplete="true"
       data-parameter-name="author"
       data-all-value="__all__"
       data-multiple="true"
@@ -61,7 +58,6 @@ function addNonSearchableFilter() {
       data-jquery-url="/jquery.js"
       data-jquery-init-url="/jquery.init.js"
       data-select2-url="/select2.js"
-      data-autocomplete="true"
       data-searchable="false"
     ></select>
   `;
@@ -239,42 +235,6 @@ describe("admin Select2 filter", () => {
 		await import(modulePath);
 
 		expect(select2.mock.calls[0][0].ajax.data({}).facets).toBe(true);
-	});
-
-	it("disables native autocomplete on the search input when Select2 opens", async () => {
-		addFilter();
-		const { on } = installDjangoJQuery();
-		await import(modulePath);
-		const openHandler = on.mock.calls.find(
-			([eventName]) => eventName === "select2:open",
-		)[1];
-		document.body.insertAdjacentHTML(
-			"beforeend",
-			`<span class="select2-container select2-container--open">
-        <span class="select2-search select2-search--dropdown">
-          <input class="select2-search__field">
-        </span>
-      </span>`,
-		);
-
-		openHandler();
-
-		expect(
-			document
-				.querySelector(".select2-search__field")
-				.getAttribute("autocomplete"),
-		).toBe("off");
-	});
-
-	it("does not suppress native autocomplete when disabled", async () => {
-		addFilter();
-		document.querySelector("select").dataset.autocomplete = "false";
-		const { on } = installDjangoJQuery();
-		await import(modulePath);
-
-		expect(
-			on.mock.calls.some(([eventName]) => eventName === "select2:open"),
-		).toBe(false);
 	});
 
 	it("removes an asynchronous filter when All is selected", async () => {

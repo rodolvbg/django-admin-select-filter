@@ -680,7 +680,6 @@ class ForeignKeyFilterTests(TestCase):
 
         assert 'class="django-admin-select-filter"' in html
         assert 'data-parameter-name="author"' in html
-        assert 'data-autocomplete="true"' in html
         assert "Rowling" in html
 
     def test_template_renders_multiple_select_markup(self):
