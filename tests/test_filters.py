@@ -14,6 +14,7 @@ from tests.testapp.admin import (
     AsyncAuthorFilter,
     AsyncGenreFilter,
     AuthorFilter,
+    AuthorStatusFilter,
     ExplicitNullableAuthorFilter,
     ExplicitOptionsGenreFilter,
     ExplicitOptionsMissingFieldFilter,
@@ -21,9 +22,11 @@ from tests.testapp.admin import (
     FixedTitleGenreFilter,
     GenreFilter,
     MissingFieldFilter,
+    NonRelationChainFilter,
     OnlyNameAuthorFilter,
+    UnknownChainFilter,
 )
-from tests.testapp.models import Author, Book
+from tests.testapp.models import Author, Book, Country
 
 pytestmark = pytest.mark.django_db
 
@@ -105,14 +108,63 @@ class TestForeignKeyFilter:
         assert 'data-autocomplete="true"' in html
         assert "Rowling" in html
 
-    def test_missing_model_is_rejected(self):
+    def test_missing_model_is_rejected_when_not_inferable(self):
         class InvalidFilter(ForeignKeyFilter):
-            parameter_name = "author"
+            parameter_name = "title"  # a plain CharField, not a relation
 
         with pytest.raises(TypeError, match="model must be configured"):
             InvalidFilter(
                 RequestFactory().get("/admin/"), {}, Book, admin.site._registry[Book]
             )
+
+    def test_missing_model_is_rejected_without_parameter_name(self):
+        class InvalidFilter(ForeignKeyFilter):
+            pass
+
+        with pytest.raises(TypeError, match="model must be configured"):
+            InvalidFilter(
+                RequestFactory().get("/admin/"), {}, Book, admin.site._registry[Book]
+            )
+
+    def test_model_is_inferred_from_parameter_name(self):
+        class InferredAuthorFilter(ForeignKeyFilter):
+            parameter_name = "author"
+
+        request = RequestFactory().get("/admin/")
+        filter_instance = InferredAuthorFilter(
+            request, {}, Book, admin.site._registry[Book]
+        )
+
+        assert filter_instance.model is Author
+
+    def test_model_is_inferred_from_nested_parameter_name(self):
+        class InferredCountryFilter(ForeignKeyFilter):
+            parameter_name = "author__country"
+
+        request = RequestFactory().get("/admin/")
+        filter_instance = InferredCountryFilter(
+            request, {}, Book, admin.site._registry[Book]
+        )
+
+        assert filter_instance.model is Country
+
+    def test_model_is_not_inferred_for_unknown_field(self):
+        class InferredUnknownFieldFilter(ForeignKeyFilter):
+            parameter_name = "not_a_real_field"
+
+        request = RequestFactory().get("/admin/")
+
+        with pytest.raises(TypeError, match="model must be configured"):
+            InferredUnknownFieldFilter(request, {}, Book, admin.site._registry[Book])
+
+    def test_model_is_not_inferred_past_a_non_relation_field(self):
+        class InferredNestedFilter(ForeignKeyFilter):
+            parameter_name = "author__name"
+
+        request = RequestFactory().get("/admin/")
+
+        with pytest.raises(TypeError, match="model must be configured"):
+            InferredNestedFilter(request, {}, Book, admin.site._registry[Book])
 
     def test_explicit_title_skips_default_lookup(self):
         request = RequestFactory().get("/admin/")
@@ -333,6 +385,44 @@ class TestChoiceFilter:
         filter_instance = self._build_filter(ExplicitOptionsMissingFieldFilter, request)
 
         assert filter_instance.title == "not_a_real_field"
+
+    def test_derives_options_from_nested_parameter_name(self):
+        request = RequestFactory().get("/admin/")
+        filter_instance = self._build_filter(AuthorStatusFilter, request)
+
+        assert filter_instance.options == [
+            ("active", "Active"),
+            ("retired", "Retired"),
+        ]
+        assert filter_instance.title == "status"
+
+    def test_queryset_filters_by_selected_nested_status(self):
+        active = Author.objects.create(name="Active One", status="active")
+        Author.objects.create(name="Retired One", status="retired")
+        Book.objects.create(title="A", author=active)
+
+        request = RequestFactory().get(
+            "/admin/tests/book/", {"author__status": "active"}
+        )
+        filter_instance = self._build_filter(
+            AuthorStatusFilter, request, {"author__status": ["active"]}
+        )
+
+        result = filter_instance.queryset(request, Book.objects.all())
+
+        assert list(result.values_list("title", flat=True)) == ["A"]
+
+    def test_options_not_resolved_past_an_unknown_chain_segment(self):
+        request = RequestFactory().get("/admin/")
+        filter_instance = self._build_filter(UnknownChainFilter, request)
+
+        assert filter_instance.title == "bogus__status"
+
+    def test_options_not_resolved_past_a_non_relation_chain_segment(self):
+        request = RequestFactory().get("/admin/")
+        filter_instance = self._build_filter(NonRelationChainFilter, request)
+
+        assert filter_instance.title == "title__status"
 
     def test_requires_parameter_name(self):
         class InvalidFilter(ChoiceFilter):

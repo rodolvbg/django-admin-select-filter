@@ -96,6 +96,33 @@ class BaseSelectFilter(AdminSelectFilterMixin, SimpleListFilter):
             **{f"{self.parameter_name}__isnull": True}
         ).exists()
 
+    def _resolve_field(self, admin_model: type[models.Model]) -> Any | None:
+        """Walk ``parameter_name`` across relations and return its final field.
+
+        Handles a nested lookup, such as ``"publisher__country"``, by
+        following each ``__``-separated segment's relation in turn — forward
+        or reverse — except the last, whose field is returned as-is. Returns
+        ``None`` when ``parameter_name`` is unset or any segment doesn't
+        resolve to a real field.
+        """
+        if self.parameter_name is None:
+            return None
+        current_model: type[models.Model] = admin_model
+        parts = self.parameter_name.split("__")
+        for part in parts[:-1]:
+            try:
+                field = current_model._meta.get_field(part)
+            except FieldDoesNotExist:
+                return None
+            related_model = getattr(field, "related_model", None)
+            if related_model is None:
+                return None
+            current_model = related_model
+        try:
+            return current_model._meta.get_field(parts[-1])
+        except FieldDoesNotExist:
+            return None
+
     def _get_option_facet_counts(self) -> dict[str, int]:
         """Count options for either filter presentation.
 
@@ -175,7 +202,12 @@ class ForeignKeyFilter(BaseSelectFilter):
     Subclasses configure the filter through these class attributes:
 
     ``model``
-        Related model whose instances become the available options. Required.
+        Related model whose instances become the available options. When left
+        unset, it's inferred by walking ``parameter_name`` across the admin
+        model's relations — including a nested lookup such as
+        ``"publisher__country"`` — and taking the last relation's target
+        model. Configure it explicitly when it can't be inferred (the lookup
+        isn't a real relation chain) or to point elsewhere.
     ``ordering``
         Field names used to order the related instances.
     ``only``
@@ -187,7 +219,7 @@ class ForeignKeyFilter(BaseSelectFilter):
     be overridden if those values conflict with valid primary keys.
     """
 
-    model: ClassVar[type[models.Model] | None] = None
+    model: type[models.Model] | None = None
     ordering: ClassVar[list[str]] = []
     only: ClassVar[list[str]] = []
 
@@ -200,7 +232,12 @@ class ForeignKeyFilter(BaseSelectFilter):
     ) -> None:
         """Configure the filter for an admin changelist request."""
         if self.model is None:
-            raise TypeError(f"{type(self).__name__}.model must be configured")
+            self.model = self._resolve_model(admin_model)
+        if self.model is None:
+            raise TypeError(
+                f"{type(self).__name__}.model must be configured, or "
+                f"{self.parameter_name!r} must resolve to a related model"
+            )
 
         if self.title is None:
             registered_admin = model_admin.admin_site._registry.get(self.model)
@@ -209,6 +246,20 @@ class ForeignKeyFilter(BaseSelectFilter):
             )
             self.title = title_model._meta.verbose_name_plural
         super().__init__(request, params, admin_model, model_admin)
+
+    def _resolve_model(
+        self, admin_model: type[models.Model]
+    ) -> type[models.Model] | None:
+        """Return ``parameter_name``'s target model, following relations.
+
+        Handles a nested lookup, such as ``"publisher__country"``, since it
+        relies on :meth:`BaseSelectFilter._resolve_field` to walk each
+        ``__``-separated segment's relation in turn — forward or reverse.
+        """
+        field = self._resolve_field(admin_model)
+        if field is None:
+            return None
+        return getattr(field, "related_model", None)
 
     def get_options(
         self,
@@ -320,7 +371,7 @@ class ChoiceFilter(BaseSelectFilter):
         if self.parameter_name is None:
             raise TypeError(f"{type(self).__name__}.parameter_name must be configured")
 
-        field = self._get_field(admin_model)
+        field = self._resolve_field(admin_model)
         if self.options is None:
             field_choices = getattr(field, "choices", None) if field else None
             if not field_choices:
@@ -334,13 +385,6 @@ class ChoiceFilter(BaseSelectFilter):
                 field.verbose_name if field is not None else self.parameter_name
             )
         super().__init__(request, params, admin_model, model_admin)
-
-    def _get_field(self, admin_model: type[models.Model]) -> Any | None:
-        """Return the configured model field, or ``None`` when it doesn't exist."""
-        try:
-            return admin_model._meta.get_field(self.parameter_name)  # type: ignore[arg-type]
-        except FieldDoesNotExist:
-            return None
 
     def get_options(
         self,

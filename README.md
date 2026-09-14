@@ -42,11 +42,10 @@ requesting user to have view permission on the target model (checked via
 from django.contrib import admin
 from django_admin_select_filter.filters import ForeignKeyFilter
 
-from myapp.models import Author, Book
+from myapp.models import Book
 
 
 class AuthorFilter(ForeignKeyFilter):
-    model = Author
     parameter_name = "author"
     ordering = ["name"]
 
@@ -55,6 +54,12 @@ class AuthorFilter(ForeignKeyFilter):
 class BookAdmin(admin.ModelAdmin):
     list_filter = [AuthorFilter]
 ```
+
+`model` is only needed when it can't be inferred. By default it's resolved by
+walking `parameter_name` across `Book`'s relations, following a nested lookup
+(e.g. `parameter_name = "author__country"`) segment by segment — forward or
+reverse — and taking the last segment's related model. Set `model` explicitly
+if the lookup isn't a real relation chain, or to point somewhere else.
 
 For a field that isn't a relation — a `choices`-backed `CharField`/`IntegerField`,
 a `BooleanField`, or anything else with discrete values — use `ChoiceFilter`
@@ -80,7 +85,10 @@ class BookAdmin(admin.ModelAdmin):
 ```
 
 Both filters share the same options: `filter_only_used_values`, `async_call`,
-`autocomplete`, `nullable` and `title`.
+`autocomplete`, `nullable` and `title`. Both also support a nested lookup for
+`parameter_name` (e.g. `"author__status"`), resolving the field — and, for
+`ForeignKeyFilter`, the `model` — by walking each `__`-separated relation in
+turn, forward or reverse.
 
 ## Development
 

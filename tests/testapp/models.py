@@ -1,8 +1,29 @@
 from django.db import models
 
 
-class Author(models.Model):
+class Country(models.Model):
     name = models.CharField(max_length=100)
+
+    def __str__(self) -> str:
+        return self.name
+
+
+class Author(models.Model):
+    class Status(models.TextChoices):
+        ACTIVE = "active", "Active"
+        RETIRED = "retired", "Retired"
+
+    name = models.CharField(max_length=100)
+    country = models.ForeignKey(
+        Country,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="authors",
+    )
+    status = models.CharField(
+        max_length=20, choices=Status.choices, null=True, blank=True
+    )
 
     def __str__(self) -> str:
         return self.name

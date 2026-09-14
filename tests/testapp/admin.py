@@ -65,6 +65,23 @@ class ExplicitOptionsMissingFieldFilter(ChoiceFilter):
     filter_only_used_values = False
 
 
+class AuthorStatusFilter(ChoiceFilter):
+    parameter_name = "author__status"
+    filter_only_used_values = False
+
+
+class UnknownChainFilter(ChoiceFilter):
+    parameter_name = "bogus__status"
+    options = [("a", "A")]
+    filter_only_used_values = False
+
+
+class NonRelationChainFilter(ChoiceFilter):
+    parameter_name = "title__status"
+    options = [("a", "A")]
+    filter_only_used_values = False
+
+
 @admin.register(Author)
 class AuthorAdmin(admin.ModelAdmin):
     search_fields = ["name"]
