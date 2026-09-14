@@ -3,7 +3,7 @@ from django.contrib import admin
 from django.template.loader import render_to_string
 from django.test import RequestFactory
 
-from tests.testapp.admin import AuthorFilter, BookAdmin
+from tests.testapp.admin import AuthorFilter
 from tests.testapp.models import Author, Book
 
 pytestmark = pytest.mark.django_db

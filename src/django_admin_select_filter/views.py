@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from typing import Any
+
 from django.apps import apps
 from django.contrib import admin
 from django.http import Http404, HttpRequest, JsonResponse
 from django.views import View
 
-from .filters import ForeignKeyFilter
+from django_admin_select_filter.filters import ForeignKeyFilter
 
 
 class Select2FilterOptionsView(View):
@@ -26,7 +28,7 @@ class Select2FilterOptionsView(View):
         )
 
     @staticmethod
-    def _get_model_admin(app_label: str, model_name: str) -> admin.ModelAdmin:
+    def _get_model_admin(app_label: str, model_name: str) -> admin.ModelAdmin[Any]:
         try:
             model = apps.get_model(app_label, model_name)
         except LookupError as exc:
@@ -39,7 +41,7 @@ class Select2FilterOptionsView(View):
     @staticmethod
     def _build_filter(
         request: HttpRequest,
-        model_admin: admin.ModelAdmin,
+        model_admin: admin.ModelAdmin[Any],
         parameter_name: str,
     ) -> ForeignKeyFilter:
         for filter_class in model_admin.get_list_filter(request):

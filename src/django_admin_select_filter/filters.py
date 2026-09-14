@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, ClassVar, Iterator
+from collections.abc import Iterator
+from typing import Any, ClassVar
 
 from django.contrib.admin import ModelAdmin
 from django.contrib.admin.filters import SimpleListFilter
@@ -9,7 +10,7 @@ from django.http import HttpRequest
 from django.utils.functional import cached_property
 from django.utils.translation import gettext
 
-from .mixins import AdminSelectFilterMixin
+from django_admin_select_filter.mixins import AdminSelectFilterMixin
 
 
 class ForeignKeyFilter(AdminSelectFilterMixin, SimpleListFilter):
@@ -54,14 +55,14 @@ class ForeignKeyFilter(AdminSelectFilterMixin, SimpleListFilter):
     all_value: ClassVar[str] = "__all__"
     null_value: ClassVar[str] = "__null__"
     title: Any | None = None
-    parameter_name: ClassVar[str | None] = None
+    parameter_name: str | None = None
 
     def __init__(
         self,
         request: HttpRequest,
         params: dict[str, Any],
         admin_model: type[models.Model],
-        model_admin: ModelAdmin,
+        model_admin: ModelAdmin[Any],
     ) -> None:
         """Configure the filter for an admin changelist request."""
         if self.model is None:
@@ -87,7 +88,7 @@ class ForeignKeyFilter(AdminSelectFilterMixin, SimpleListFilter):
         super().__init__(request, params, admin_model, model_admin)
 
     @cached_property
-    def model_admin_queryset(self) -> models.QuerySet:
+    def model_admin_queryset(self) -> models.QuerySet[Any]:
         """Return and cache the source ModelAdmin queryset when first needed."""
         return self.model_admin.get_queryset(self.request)
 
@@ -112,7 +113,7 @@ class ForeignKeyFilter(AdminSelectFilterMixin, SimpleListFilter):
         self,
         request: HttpRequest | None = None,
         q: str = "",
-    ) -> models.QuerySet:
+    ) -> models.QuerySet[Any]:
         """Return allowed related instances, optionally searched with ``q``.
 
         The supplied request belongs to the API call. When it is omitted, the
@@ -196,7 +197,7 @@ class ForeignKeyFilter(AdminSelectFilterMixin, SimpleListFilter):
     def lookups(
         self,
         request: HttpRequest,
-        model_admin: ModelAdmin,
+        model_admin: ModelAdmin[Any],
     ) -> list[tuple[str, str]]:
         """Return choices rendered initially by Django's list-filter template."""
         assert self.model is not None
@@ -223,8 +224,8 @@ class ForeignKeyFilter(AdminSelectFilterMixin, SimpleListFilter):
     def queryset(
         self,
         request: HttpRequest,
-        queryset: models.QuerySet,
-    ) -> models.QuerySet:
+        queryset: models.QuerySet[Any],
+    ) -> models.QuerySet[Any]:
         """Apply the selected related or null value to the changelist queryset."""
         value = self.value()
         if value is None or self.parameter_name is None:
@@ -233,7 +234,7 @@ class ForeignKeyFilter(AdminSelectFilterMixin, SimpleListFilter):
             return queryset.filter(**{f"{self.parameter_name}__isnull": True})
         return queryset.filter(**{self.parameter_name: value})
 
-    def choices(self, changelist: Any) -> Iterator[dict[str, Any]]:
+    def choices(self, changelist: Any) -> Iterator[dict[str, Any]]:  # type: ignore[override]
         """Yield Django choices with the raw lookup key required by Select2."""
         for index, choice in enumerate(super().choices(changelist)):
             key = "" if index == 0 else str(self.lookup_choices[index - 1][0])

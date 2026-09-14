@@ -1,6 +1,6 @@
 [build-system]
-requires = ["hatchling"]
 build-backend = "hatchling.build"
+requires = [ "hatchling" ]
 
 [project]
 name = "django-admin-select-filter"
@@ -8,44 +8,79 @@ version = "0.1.0"
 description = "Select2-powered admin list filters for Django, including an async foreign-key filter."
 readme = "README.md"
 license = "MIT"
-authors = [{ name = "Rodolfo Becerra" }]
+authors = [ { name = "Rodolfo Becerra" } ]
 requires-python = ">=3.10"
 classifiers = [
-    "Framework :: Django",
-    "Framework :: Django :: 4.2",
-    "Framework :: Django :: 5.0",
-    "Framework :: Django :: 5.1",
-    "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
+  "Framework :: Django",
+  "Framework :: Django :: 4.2",
+  "Framework :: Django :: 5.0",
+  "Framework :: Django :: 5.1",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
 ]
-dependencies = ["django>=4.2"]
+dependencies = [ "django>=4.2" ]
+optional-dependencies.dev = [ "django-stubs>=5", "mypy>=1.11", "pre-commit>=4", "ruff>=0.6" ]
+optional-dependencies.test = [ "pytest>=8", "pytest-django>=4.8" ]
+urls.Homepage = "https://github.com/rodolvbg/django-admin-select-filter"
+urls.Repository = "https://github.com/rodolvbg/django-admin-select-filter"
 
-[project.optional-dependencies]
-test = ["pytest>=8", "pytest-django>=4.8"]
-dev = ["ruff>=0.6", "mypy>=1.11"]
-
-[project.urls]
-Homepage = "https://github.com/rodolvbg/django-admin-select-filter"
-Repository = "https://github.com/rodolvbg/django-admin-select-filter"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/django_admin_select_filter"]
-
-[tool.pytest.ini_options]
-DJANGO_SETTINGS_MODULE = "tests.settings"
-python_files = ["test_*.py"]
-pythonpath = ["."]
+[tool.hatch]
+build.targets.wheel.packages = [ "src/django_admin_select_filter" ]
 
 [tool.ruff]
-line-length = 88
 target-version = "py310"
-
-[tool.ruff.lint]
-select = ["E", "F", "I", "UP", "B"]
+line-length = 88
+lint.select = [
+  "B",
+  "C4",
+  "E",
+  "F",
+  "FURB",
+  "I",
+  "ICN",
+  "INP",
+  "LOG",
+  "PERF",
+  "PGH004",
+  "RUF",
+  "SIM",
+  "T20",
+  "TID",
+  "UP",
+  "W",
+]
+lint.ignore = [ "B9", "E203", "E501", "E701", "RUF012", "SIM105" ]
+lint.flake8-tidy-imports.ban-relative-imports = "all"
 
 [tool.mypy]
+ignore_missing_imports = true
+follow_imports = "silent"
 python_version = "3.10"
+disallow_any_generics = true
+check_untyped_defs = true
+local_partial_types = true
+enable_error_code = [
+  "deprecated",
+  "ignore-without-code",
+  "possibly-undefined",
+  "redundant-expr",
+  "truthy-bool",
+  "truthy-iterable",
+  "unused-ignore",
+]
+show_error_code_links = true
+plugins = [ "mypy_django_plugin.main" ]
+
+[tool.django-stubs]
+django_settings_module = "django_admin_select_filter._typecheck_settings"
+
+[tool.pytest]
+ini_options.pythonpath = [ "." ]
+ini_options.python_files = [ "test_*.py" ]
+ini_options.DJANGO_SETTINGS_MODULE = "tests.settings"

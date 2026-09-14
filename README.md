@@ -56,4 +56,11 @@ class BookAdmin(admin.ModelAdmin):
 ```bash
 pip install -e ".[test,dev]"
 pytest
+pre-commit install
 ```
+
+`pre-commit` runs ruff, mypy, django-upgrade, djade (template linting),
+pyproject-fmt and biome (for the bundled JS/CSS). The `mypy` hook runs
+against the same environment (`pip install -e ".[dev]"` must be done first)
+rather than an isolated one, since `django-stubs` needs the package
+importable to resolve model/queryset types.

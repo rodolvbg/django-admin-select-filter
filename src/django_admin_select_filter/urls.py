@@ -1,6 +1,6 @@
 from django.urls import path
 
-from .views import Select2FilterOptionsView
+from django_admin_select_filter.views import Select2FilterOptionsView
 
 app_name = "admin_select_filter"
 

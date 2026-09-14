@@ -1,8 +1,7 @@
 from django.contrib import admin
 
 from django_admin_select_filter.filters import ForeignKeyFilter
-
-from .models import Author, Book
+from tests.testapp.models import Author, Book
 
 
 class AuthorFilter(ForeignKeyFilter):
