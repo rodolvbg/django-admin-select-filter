@@ -2,7 +2,7 @@
 
 Select2-powered admin list filters for Django.
 
-<!-- TODO: screenshot — the Select2 dropdown replacing a default admin list filter -->
+![Select2 filters in the admin sidebar](docs/screenshots/hero.png)
 
 ## Install
 
@@ -48,7 +48,7 @@ class BookAdmin(admin.ModelAdmin):
     list_filter = [GenreFilter, StatusFilter]
 ```
 
-<!-- TODO: screenshot — ChoiceFilter dropdown in the admin sidebar -->
+![ChoiceFilter dropdown open, listing Fiction/Non-fiction](docs/screenshots/choice-filter.png)
 
 Since `options` accepts any explicit `(value, label)` list, `ChoiceFilter`
 can even filter a `ForeignKey` — pass one pair per related row:
@@ -85,7 +85,7 @@ class BookAdmin(admin.ModelAdmin):
     list_filter = [AuthorFilter]
 ```
 
-<!-- TODO: screenshot — ForeignKeyFilter dropdown with a search box -->
+![ForeignKeyFilter dropdown with a search box, listing authors](docs/screenshots/foreign-key-filter.png)
 
 `model` is only needed when it can't be inferred. By default it's resolved by
 walking `parameter_name` across `Book`'s relations, following a nested lookup
@@ -137,7 +137,7 @@ class AuthorFilter(ForeignKeyFilter):
     multiple = True
 ```
 
-<!-- TODO: screenshot — multiple = True showing several selected chips -->
+![multiple = True with two selected author chips](docs/screenshots/multiple.png)
 
 Selected values are joined in the query string with `multiple_separator`
 (`","` by default) and applied with an `__in` lookup, so configured values
