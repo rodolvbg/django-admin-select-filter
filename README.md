@@ -1,5 +1,11 @@
 # django-admin-select-filter
 
+[![Build status on Github](https://github.com/rodolvbg/django-admin-select-filter/actions/workflows/pytest.yml/badge.svg)](https://github.com/rodolvbg/django-admin-select-filter/actions/workflows/pytest.yml)
+[![Current version on PyPi](https://img.shields.io/pypi/v/django-admin-select-filter.svg)](https://pypi.org/project/django-admin-select-filter/)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/django-admin-select-filter)](https://pypi.org/project/django-admin-select-filter/)
+[![PyPI - Django Version](https://img.shields.io/pypi/djversions/django-admin-select-filter)](https://pypi.org/project/django-admin-select-filter/)
+[![Downloads](https://static.pepy.tech/personalized-badge/django-admin-select-filter?period=month&units=international_system&left_color=black&right_color=blue&left_text=Downloads/month)](https://pepy.tech/project/django-admin-select-filter)
+
 Select2-powered admin list filters for Django.
 
 ![Select2 filters in the admin sidebar](docs/screenshots/hero.png)
