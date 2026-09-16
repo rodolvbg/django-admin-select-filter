@@ -105,6 +105,13 @@ plugins = [ "mypy_django_plugin.main" ]
 [tool.django-stubs]
 django_settings_module = "tests.settings"
 
+[tool.pytest]
+ini_options.pythonpath = [ "src", "." ]
+ini_options.python_files = [ "*_tests.py", "test_*.py", "tests.py" ]
+ini_options.python_classes = [ "*Tests" ]
+ini_options.addopts = "--reuse-db --cov=src/django_admin_select_filter --cov-branch --cov-report=term-missing"
+ini_options.DJANGO_SETTINGS_MODULE = "tests.settings"
+
 [tool.coverage]
 run.branch = true
 run.source = [ "src/django_admin_select_filter" ]
