@@ -64,7 +64,7 @@ uv run tox run-parallel   # every env, in parallel
 uv run tox -e py313-dj51  # a single env, e.g. to debug one failure
 ```
 
-`tox.ini` lists the exact envs. Each one gets its own ephemeral venv (via
+`[tool.tox]` in `pyproject.toml` lists the exact envs. Each one gets its own ephemeral venv (via
 [tox-uv](https://github.com/tox-dev/tox-uv), using uv's own Python
 builds — `uv python install <version>` once for any you don't have yet)
 with only `pytest`/`pytest-django`/`pytest-cov` plus the test-only deps
