@@ -2,20 +2,24 @@ from __future__ import annotations
 
 import functools
 import json
-from collections.abc import Iterator
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING
 
-from django.contrib.admin import ModelAdmin
 from django.contrib.admin.filters import SimpleListFilter
 from django.core.exceptions import FieldDoesNotExist
 from django.db import models
 from django.forms import Media
-from django.http import HttpRequest
 from django.templatetags.static import static
 from django.urls import reverse
 from django.utils.functional import cached_property
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from typing import Any, ClassVar
+
+    from django.contrib.admin import ModelAdmin
+    from django.http import HttpRequest
 
 # The default ``name`` django_admin_select_filter_path() registers its route
 # under. Imported from there (rather than declared alongside it) so filters

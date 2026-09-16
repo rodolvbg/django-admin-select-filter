@@ -1,15 +1,20 @@
 from __future__ import annotations
 
 import functools
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING
 
 from django.apps import apps
-from django.contrib import admin
 from django.contrib.admin.sites import AdminSite, all_sites
-from django.http import HttpRequest, JsonResponse
+from django.http import JsonResponse
 from django.views import View
 
 from django_admin_select_filter.filters import BaseSelectFilter
+
+if TYPE_CHECKING:
+    from typing import Any, ClassVar
+
+    from django.contrib import admin
+    from django.http import HttpRequest
 
 AsyncFilterRegistry = dict[
     AdminSite, dict[str, dict[str, dict[str, type[BaseSelectFilter]]]]

@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING
 
-from django.urls import URLResolver, include, path
+from django.urls import include, path
 
 from django_admin_select_filter.filters import ASYNC_CALL_URL_NAME
 from django_admin_select_filter.views import Select2FilterOptionsView
+
+if TYPE_CHECKING:
+    from typing import Any
+
+    from django.urls import URLResolver
 
 
 def django_admin_select_filter_path(
