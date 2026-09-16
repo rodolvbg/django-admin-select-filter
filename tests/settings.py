@@ -1,9 +1,16 @@
 import os
 
+import django_stubs_ext
+
 # pytest-playwright's sync API leaves a background asyncio loop running in
 # this thread, which trips Django's async-safety guard during the one-time
 # test database setup (a plain sqlite DDL call, not actually unsafe here).
 os.environ.setdefault("DJANGO_ALLOW_ASYNC_UNSAFE", "1")
+
+# Lets test code subscript generics like ModelAdmin[Book] at runtime, since
+# this settings module also backs the mypy pre-commit hook's type-checking
+# pass over tests/.
+django_stubs_ext.monkeypatch()
 
 SECRET_KEY = "test-secret-key"
 DEBUG = True

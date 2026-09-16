@@ -116,12 +116,12 @@ class AsyncCountryNameFilter(ChoiceFilter):
 
 
 @admin.register(Author)
-class AuthorAdmin(admin.ModelAdmin):
+class AuthorAdmin(admin.ModelAdmin[Author]):
     search_fields = ["name"]
 
 
 @admin.register(Book)
-class BookAdmin(admin.ModelAdmin):
+class BookAdmin(admin.ModelAdmin[Book]):
     list_filter = [
         MissingFieldFilter,
         AuthorFilter,
@@ -142,12 +142,12 @@ e2e_admin_site = admin.AdminSite(name="e2e_admin")
 
 
 @admin.register(Author, site=e2e_admin_site)
-class E2EAuthorAdmin(admin.ModelAdmin):
+class E2EAuthorAdmin(admin.ModelAdmin[Author]):
     search_fields = ["name"]
 
 
 @admin.register(Book, site=e2e_admin_site)
-class E2EBookAdmin(admin.ModelAdmin):
+class E2EBookAdmin(admin.ModelAdmin[Book]):
     list_filter = [AuthorFilter]
 
 
@@ -155,5 +155,5 @@ class E2EBookAdmin(admin.ModelAdmin):
 # site), to prove the async options view finds a model regardless of which
 # AdminSite it's registered on.
 @admin.register(Country, site=e2e_admin_site)
-class E2ECountryAdmin(admin.ModelAdmin):
+class E2ECountryAdmin(admin.ModelAdmin[Country]):
     list_filter = [AsyncCountryNameFilter]

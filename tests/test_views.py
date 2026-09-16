@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 from django.contrib import admin
 from django.contrib.auth.models import AnonymousUser, User
+from django.http import HttpResponse
 from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
 from inline_snapshot import snapshot
@@ -225,8 +226,12 @@ class Select2FilterOptionsViewMethodTests(TestCase):
 
         with self.subTest("matches a (field, filter) tuple entry"):
 
-            class _TupleFilterAdmin(admin.ModelAdmin):
-                list_filter = [("author", AsyncAuthorFilter)]
+            class _TupleFilterAdmin(admin.ModelAdmin[Book]):
+                # Not a real FieldListFilter tuple (Django's stub rejects a
+                # bare BaseSelectFilter subclass here) — only exercises
+                # _get_filter_class()'s own tuple-unpacking, never Django's
+                # actual FieldListFilter calling convention.
+                list_filter = [("author", AsyncAuthorFilter)]  # type: ignore[list-item]
 
             tuple_admin = _TupleFilterAdmin(Book, admin.site)
             self.assertIs(
@@ -269,7 +274,7 @@ class Select2FilterOptionsViewMethodTests(TestCase):
         )
         permitted_site = admin.site
 
-        class _DenyingModelAdmin(admin.ModelAdmin):
+        class _DenyingModelAdmin(admin.ModelAdmin[Book]):
             def has_view_permission(self, request, obj=None):
                 return False
 
@@ -296,14 +301,14 @@ class Select2FilterOptionsViewMethodTests(TestCase):
         )
         permitted_site = admin.site
 
-        class _DenyingModelAdmin(admin.ModelAdmin):
+        class _DenyingModelAdmin(admin.ModelAdmin[Book]):
             def has_view_permission(self, request, obj=None):
                 return False
 
         class _DenyingSite:
             _registry = {Book: _DenyingModelAdmin(Book, admin.site)}
 
-        class _EmptyListFilterModelAdmin(admin.ModelAdmin):
+        class _EmptyListFilterModelAdmin(admin.ModelAdmin[Book]):
             list_filter = ()
 
         class _PermittedNoMatchSite:
@@ -387,5 +392,6 @@ class Select2FilterOptionsViewMethodTests(TestCase):
             Select2FilterOptionsView._build_async_filter_registry.cache_clear()
 
         self.assertEqual(response.status_code, 200)
+        assert isinstance(response, HttpResponse)
         results = json.loads(response.content)["results"]
         self.assertIn({"id": str(author.pk), "text": "Rowling"}, results)

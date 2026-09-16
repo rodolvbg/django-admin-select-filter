@@ -27,6 +27,7 @@ classifiers = [
 dependencies = [ "django>=4.2" ]
 optional-dependencies.dev = [ "django-stubs>=5", "mypy>=1.11", "pre-commit>=4", "ruff>=0.6" ]
 optional-dependencies.test = [
+  "django-stubs-ext>=5",
   "inline-snapshot>=0.20.10",
   "inline-snapshot-django>=1.1",
   "playwright>=1.62",
@@ -41,6 +42,7 @@ urls.Repository = "https://github.com/rodolvbg/django-admin-select-filter"
 [dependency-groups]
 dev = [ "django-stubs>=5", "mypy>=1.11", "pre-commit>=4", "ruff>=0.6" ]
 test = [
+  "django-stubs-ext>=5",
   "inline-snapshot>=0.20.10",
   "inline-snapshot-django>=1.1",
   "playwright>=1.62",
@@ -101,11 +103,10 @@ show_error_code_links = true
 plugins = [ "mypy_django_plugin.main" ]
 
 [tool.django-stubs]
-django_settings_module = "django_admin_select_filter._typecheck_settings"
+django_settings_module = "tests.settings"
 
 [tool.coverage]
 run.branch = true
-run.omit = [ "*/_typecheck_settings.py" ]
 run.source = [ "src/django_admin_select_filter" ]
 report.show_missing = true
 report.skip_covered = true

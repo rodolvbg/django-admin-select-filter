@@ -2,12 +2,16 @@ import re
 
 from django.contrib.auth.models import User
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
-from playwright.sync_api import expect, sync_playwright
+from playwright.sync_api import Browser, Page, Playwright, expect, sync_playwright
 
 from tests.testapp.models import Author, Book
 
 
 class SelectFilterTests(StaticLiveServerTestCase):
+    playwright: Playwright
+    browser: Browser
+    page: Page
+
     @classmethod
     def setUpClass(cls):
         super().setUpClass()

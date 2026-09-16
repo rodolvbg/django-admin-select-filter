@@ -1,3 +1,4 @@
+import sys
 import types
 
 from django.urls import reverse
@@ -13,7 +14,15 @@ class Select2FilterUrlsTests:
         )
 
     def test_route_is_configurable(self):
-        urlconf = types.ModuleType("temp_urlconf")
-        urlconf.urlpatterns = [django_admin_select_filter_path(route="custom/")]
-
-        assert reverse("admin_select_filter:options", urlconf=urlconf) == "/custom/"
+        urlconf = types.ModuleType("tests_temp_urlconf")
+        urlconf.urlpatterns = [  # type: ignore[attr-defined]
+            django_admin_select_filter_path(route="custom/")
+        ]
+        sys.modules[urlconf.__name__] = urlconf
+        try:
+            assert (
+                reverse("admin_select_filter:options", urlconf=urlconf.__name__)
+                == "/custom/"
+            )
+        finally:
+            del sys.modules[urlconf.__name__]

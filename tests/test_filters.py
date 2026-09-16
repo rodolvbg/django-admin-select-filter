@@ -1,4 +1,5 @@
 import re
+from unittest.mock import patch
 
 import pytest
 from django.contrib import admin
@@ -62,14 +63,17 @@ class _FakeModelAdmin:
 class BaseSelectFilterTests(TestCase):
     def _build(self, **attrs):
         filter_instance = BaseSelectFilter.__new__(BaseSelectFilter)
-        filter_instance.all_value = "__all__"
-        filter_instance.null_value = "__null__"
-        filter_instance.filter_only_used_values = True
-        filter_instance.async_call = False
-        filter_instance.nullable = None
-        filter_instance.parameter_name = None
-        filter_instance.used_parameters = {}
-        for name, value in attrs.items():
+        defaults = {
+            "all_value": "__all__",
+            "null_value": "__null__",
+            "filter_only_used_values": True,
+            "async_call": False,
+            "nullable": None,
+            "parameter_name": None,
+            "used_parameters": {},
+            **attrs,
+        }
+        for name, value in defaults.items():
             setattr(filter_instance, name, value)
         return filter_instance
 
@@ -79,7 +83,7 @@ class BaseSelectFilterTests(TestCase):
 
         with self.subTest("resolved via reverse() when async and unset"):
             request = RequestFactory().get("/admin/")
-            filter_instance = AsyncAuthorFilter(
+            filter_instance: BaseSelectFilter = AsyncAuthorFilter(
                 request, {}, Book, admin.site._registry[Book]
             )
             self.assertEqual(
@@ -483,7 +487,7 @@ class BaseSelectFilterTests(TestCase):
 
         with self.subTest("csp_nonce picked up from the request"):
             request = RequestFactory().get("/admin/")
-            request.csp_nonce = "abc123"
+            setattr(request, "csp_nonce", "abc123")  # noqa: B010
             filter_instance = self._build(request=request)
             js_html = str(filter_instance.media["js"])
             self.assertEqual(js_html.count('nonce="abc123"'), 2)
@@ -666,17 +670,14 @@ class ForeignKeyFilterTests(TestCase):
             author = Author.objects.create(name="Rowling")
             Book.objects.create(title="HP", author=author)
             related_admin = admin.site._registry[Author]
-            original_get_search_results = related_admin.get_search_results
-            related_admin.get_search_results = lambda request, queryset, term: (
-                queryset,
-                True,
-            )
-            try:
+            with patch.object(
+                related_admin,
+                "get_search_results",
+                lambda request, queryset, search_term: (queryset, True),
+            ):
                 request = RequestFactory().get("/admin/")
                 filter_instance = self._build_filter(request)
                 assert list(filter_instance.get_options(q="anything")) == [author]
-            finally:
-                related_admin.get_search_results = original_get_search_results
             transaction.set_rollback(True)
 
     def test__option_items(self):
@@ -691,7 +692,7 @@ class ForeignKeyFilterTests(TestCase):
     def test__selected_option_items(self):
         with self.subTest("no selection returns empty"):
             request = RequestFactory().get("/admin/tests/book/")
-            filter_instance = AsyncAuthorFilter(
+            filter_instance: BaseSelectFilter = AsyncAuthorFilter(
                 request, {}, Book, admin.site._registry[Book]
             )
             assert filter_instance._selected_option_items() == []
@@ -1270,7 +1271,10 @@ class FieldListFilterTests(TestCase):
             request
         )
         matching = [
-            spec for spec in filter_specs if spec.parameter_name == "author__country"
+            spec
+            for spec in filter_specs
+            if isinstance(spec, ForeignKeyFilter)
+            and spec.parameter_name == "author__country"
         ]
 
         self.assertEqual(len(matching), 1)
