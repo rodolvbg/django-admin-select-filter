@@ -1,8 +1,10 @@
 import re
 from unittest.mock import patch
 
+import django
 import pytest
 from django.contrib import admin
+from django.contrib.admin.filters import SimpleListFilter
 from django.contrib.auth.models import User
 from django.db import transaction
 from django.template.loader import render_to_string
@@ -41,6 +43,48 @@ from tests.testapp.admin import (
 from tests.testapp.models import Author, Book, Country
 
 pytestmark = pytest.mark.django_db
+
+
+def _changelist_params(params):
+    """Adapt a ``{name: [value, ...]}`` params dict — the shape every
+    filter construction in this file uses — to whatever shape Django's
+    own ``ChangeList`` actually passes to a list filter's constructor
+    for the installed Django version: a list per key
+    (``request.GET.lists()``) from Django 5.0 on, a single scalar value
+    per key (``request.GET.items()``) before that.
+    """
+    if not params:
+        return {}
+    if django.VERSION >= (5, 0):
+        return {
+            key: value if isinstance(value, list) else [value]
+            for key, value in params.items()
+        }
+    return {
+        key: value[-1] if isinstance(value, list) else value
+        for key, value in params.items()
+    }
+
+
+@pytest.fixture(autouse=True)
+def _adapt_filter_params_to_django_version(monkeypatch):
+    """Every filter construction in this file passes ``params`` shaped
+    for Django 5.0+ (a list of raw values per key). Real Django < 5.0
+    builds a single scalar per key instead — the filter classes under
+    test never build this dict themselves, they only read
+    ``self.used_parameters``, which ``SimpleListFilter.__init__``
+    populates from whatever shape ``params`` arrives in. Patching that
+    one shared choke point (rather than every one of this file's ~20
+    call sites) adapts every filter construction transparently, so
+    tests don't silently return empty querysets on Django < 5.0 instead
+    of exercising the real behavior.
+    """
+    original_init = SimpleListFilter.__init__
+
+    def patched_init(self, request, params, model, model_admin):
+        original_init(self, request, _changelist_params(params), model, model_admin)
+
+    monkeypatch.setattr(SimpleListFilter, "__init__", patched_init)
 
 
 class _FakeChangeList:

@@ -25,7 +25,7 @@ classifiers = [
   "Programming Language :: Python :: 3.14",
 ]
 dependencies = [ "django>=4.2" ]
-optional-dependencies.dev = [ "django-stubs>=5", "mypy>=1.11", "pre-commit>=4", "ruff>=0.6" ]
+optional-dependencies.dev = [ "django-stubs>=5", "mypy>=1.11", "pre-commit>=4", "ruff>=0.6", "tox>=4", "tox-uv>=1" ]
 optional-dependencies.test = [
   "django-stubs-ext>=5",
   "inline-snapshot>=0.20.10",
@@ -40,7 +40,7 @@ urls.Homepage = "https://github.com/rodolvbg/django-admin-select-filter"
 urls.Repository = "https://github.com/rodolvbg/django-admin-select-filter"
 
 [dependency-groups]
-dev = [ "django-stubs>=5", "mypy>=1.11", "pre-commit>=4", "ruff>=0.6" ]
+dev = [ "django-stubs>=5", "mypy>=1.11", "pre-commit>=4", "ruff>=0.6", "tox>=4", "tox-uv>=1" ]
 test = [
   "django-stubs-ext>=5",
   "inline-snapshot>=0.20.10",
