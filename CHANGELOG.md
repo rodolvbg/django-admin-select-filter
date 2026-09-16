@@ -1,5 +1,36 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Compatibility matrix via tox (`[tool.tox]` in `pyproject.toml`, using
+  [tox-uv](https://github.com/tox-dev/tox-uv)): tests every Django series
+  in `classifiers` (4.2 through 5.1) against its oldest and newest
+  supported Python, within this package's own floor. `uv run tox run`
+  locally, a separate `compat-matrix.yml` CI workflow.
+- `.github/workflows/pre-commit.yml`.
+
+### Changed
+
+- Test config moved from a standalone `pytest.ini` into
+  `[tool.pytest.ini_options]` in `pyproject.toml`.
+- `release.yml` now builds with `uv build` instead of `pip install build` +
+  `python -m build`, matching the rest of the uv-centric tooling.
+
+### Fixed
+
+- The test suite constructed a list filter's `params` dict hardcoded to
+  Django 5.0+'s shape (`request.GET.lists()`-style, one list per key).
+  Real Django < 5.0 passes a single scalar per key instead
+  (`request.GET.items()`-style) — the filter classes themselves never
+  build this dict, they only read whatever `SimpleListFilter.__init__`
+  populates from it, so the mismatch was entirely in the tests, not in
+  `filters.py`/`views.py`/`urls.py`. It silently produced empty querysets
+  in `test_filters.py` under Django 4.2, caught by the new compatibility
+  matrix. Fixed with a single `autouse` fixture adapting the shape at
+  the one shared choke point, rather than touching ~20 call sites.
+
 ## [0.1.1] - 2026-09-15
 
 ### Added
