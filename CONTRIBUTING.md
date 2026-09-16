@@ -48,5 +48,5 @@ its `bin/`).
 bundled JS:
 
 ```bash
-npm run coverage:js
+npm run coverage
 ```
