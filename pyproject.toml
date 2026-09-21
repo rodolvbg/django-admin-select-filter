@@ -23,6 +23,7 @@ classifiers = [
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
   "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: 3.15",
 ]
 dependencies = [ "django>=4.2" ]
 optional-dependencies.dev = [ "django-stubs>=5", "mypy>=1.11", "pre-commit>=4", "ruff>=0.6", "tox>=4", "tox-uv>=1" ]
@@ -113,10 +114,10 @@ ini_options.addopts = "--reuse-db --cov=django_admin_select_filter --cov-report=
 ini_options.DJANGO_SETTINGS_MODULE = "tests.settings"
 
 [tool.coverage]
-run.branch = true
 run.source = [ "django_admin_select_filter" ]
-report.show_missing = true
+run.branch = true
 report.skip_covered = true
+report.show_missing = true
 
 [tool.tox]
 env_list = [
@@ -127,7 +128,8 @@ env_list = [
   "py310-dj50",
   "py310-dj51",
 ]
-env_run_base.commands = [ [ "pytest", "tests", "--ignore=tests/e2e", "{posargs}" ] ]
+env_run_base.package = "wheel"
+env_run_base.wheel_build_env = ".pkg"
 env_run_base.deps = [
   "pytest",
   "pytest-django",
@@ -139,8 +141,7 @@ env_run_base.deps = [
   { replace = "if", condition = "factor.dj50", then = [ "django>=5.0,<5.1" ], extend = true },
   { replace = "if", condition = "factor.dj51", then = [ "django>=5.1,<5.2" ], extend = true },
 ]
-env_run_base.package = "wheel"
-env_run_base.wheel_build_env = ".pkg"
+env_run_base.commands = [ [ "pytest", "tests", "--ignore=tests/e2e", "{posargs}" ] ]
 
 [tool.inline-snapshot]
 format-command = "ruff format --stdin-filename {filename} -"
