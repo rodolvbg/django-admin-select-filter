@@ -22,22 +22,44 @@ export function registerPlugin(plugin) {
 	plugins.push(plugin);
 }
 
+// Select2's translation files register themselves on the global `jQuery`,
+// so they load while it points at the jQuery Select2 is attached to.
+async function loadSelect2Language(assets) {
+	if (!assets.select2I18nUrl || window.__djangoAdminSelectFilterLanguage) {
+		return;
+	}
+	window.__djangoAdminSelectFilterLanguage = assets.select2I18nUrl;
+	await loadScript(assets.select2I18nUrl);
+}
+
+async function withGlobalJQuery(jquery, callback) {
+	const previousJQuery = window.jQuery;
+	const previousDollar = window.$;
+	window.jQuery = jquery;
+	window.$ = jquery;
+	try {
+		await callback();
+	} finally {
+		window.jQuery = previousJQuery;
+		window.$ = previousDollar;
+	}
+}
+
 async function ensureSelect2Loaded(assets) {
 	if (!window.django?.jQuery) {
 		await loadScript(assets.jqueryUrl);
 		await loadScript(assets.select2Url);
+		await loadSelect2Language(assets);
 		await loadScript(assets.jqueryInitUrl);
 	} else if (!window.django.jQuery.fn.select2) {
-		const previousJQuery = window.jQuery;
-		const previousDollar = window.$;
-		window.jQuery = window.django.jQuery;
-		window.$ = window.django.jQuery;
-		try {
+		await withGlobalJQuery(window.django.jQuery, async () => {
 			await loadScript(assets.select2Url);
-		} finally {
-			window.jQuery = previousJQuery;
-			window.$ = previousDollar;
-		}
+			await loadSelect2Language(assets);
+		});
+	} else {
+		await withGlobalJQuery(window.django.jQuery, () =>
+			loadSelect2Language(assets),
+		);
 	}
 }
 
@@ -60,6 +82,9 @@ async function initializeFilters() {
 			placeholder: element.dataset.placeholder,
 			width: "100%",
 		};
+		if (element.dataset.language) {
+			options.language = element.dataset.language;
+		}
 		for (const plugin of plugins) {
 			if (plugin.appliesTo(element)) plugin.extendOptions?.(element, options);
 		}

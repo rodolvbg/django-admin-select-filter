@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 from django.apps import apps
 from django.contrib.admin.sites import AdminSite, all_sites
 from django.http import JsonResponse
+from django.utils.translation import gettext
 from django.views import View
 
 from django_admin_select_filter.filters import BaseSelectFilter
@@ -92,7 +93,11 @@ class Select2FilterOptionsView(View):
         parameter_name = request.GET.get("parameter_name")
         if not (app_label and model_name and parameter_name):
             return JsonResponse(
-                {"detail": "app_label, model_name and parameter_name are required."},
+                {
+                    "detail": gettext(
+                        "app_label, model_name and parameter_name are required."
+                    )
+                },
                 status=400,
             )
 
@@ -103,13 +108,13 @@ class Select2FilterOptionsView(View):
 
         if model is None or not any(model in site._registry for site in all_sites):
             return JsonResponse(
-                {"detail": "The requested admin model was not found."},
+                {"detail": gettext("The requested admin model was not found.")},
                 status=404,
             )
         if not any(
             self._has_view_permission(site, model, request) for site in all_sites
         ):
-            return JsonResponse({"detail": "Forbidden."}, status=403)
+            return JsonResponse({"detail": gettext("Forbidden.")}, status=403)
 
         find_admin_site = (
             self._find_admin_site_via_registry
@@ -119,7 +124,7 @@ class Select2FilterOptionsView(View):
         admin_site = find_admin_site(model, request, parameter_name)
         if admin_site is None:
             return JsonResponse(
-                {"detail": "The requested admin filter was not found."},
+                {"detail": gettext("The requested admin filter was not found.")},
                 status=404,
             )
 

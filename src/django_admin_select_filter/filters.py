@@ -5,6 +5,7 @@ import json
 from typing import TYPE_CHECKING
 
 from django.contrib.admin.filters import SimpleListFilter
+from django.contrib.admin.widgets import get_select2_language
 from django.core.exceptions import FieldDoesNotExist
 from django.db import models
 from django.forms import Media
@@ -195,6 +196,21 @@ class BaseSelectFilter(SimpleListFilter):
     def model_admin_queryset(self) -> models.QuerySet[Any]:
         """Return and cache the source ModelAdmin queryset when first needed."""
         return self.model_admin.get_queryset(self.request)
+
+    @property
+    def select2_language(self) -> str | None:
+        """Select2 language code for the active language, if Select2 has one."""
+        return get_select2_language()
+
+    @property
+    def select2_i18n_url(self) -> str | None:
+        """Select2's translations for the active language (the same file the
+        admin's autocomplete widgets load), so its messages — "No results
+        found", "Searching…" — follow the admin's language."""
+        language = self.select2_language
+        return (
+            static(f"admin/js/vendor/select2/i18n/{language}.js") if language else None
+        )
 
     @property
     def media(self) -> Media:

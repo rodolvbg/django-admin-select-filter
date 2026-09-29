@@ -228,6 +228,13 @@ trade-off: it calls `get_list_filter(request=None)` while building the
 cache, so a `get_list_filter()` override that depends on the request isn't
 supported in this mode.
 
+## Translations
+
+Ships a Spanish (`es`) translation; its texts otherwise come from Django's
+own catalogs, so they follow the admin's language. Select2's own messages
+("No results found", "Searching…") load the same translation file the
+admin's autocomplete fields use for the active language.
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, running the

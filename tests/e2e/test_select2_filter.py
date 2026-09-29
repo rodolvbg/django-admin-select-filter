@@ -78,3 +78,25 @@ class SelectFilterTests(StaticLiveServerTestCase):
         rows = self.page.locator("#result_list tbody tr")
         expect(rows).to_have_count(1)
         expect(rows).to_contain_text("Harry Potter")
+
+
+class SpanishSelectFilterTests(SelectFilterTests):
+    """Select2's own messages follow the active language (Spanish here)."""
+
+    def setUp(self):
+        override = self.settings(LANGUAGE_CODE="es")
+        override.enable()
+        self.addCleanup(override.disable)
+        super().setUp()
+
+    def test_select2_messages_are_translated(self):
+        self.page.goto(f"{self.live_server_url}/e2e-admin/testapp/book/")
+
+        self.page.locator(
+            "select.django-admin-select-filter + span .select2-selection"
+        ).first.click()
+        self.page.locator(".select2-search__field").fill("zzz")
+
+        expect(self.page.locator(".select2-results__message")).to_have_text(
+            "No se encontraron resultados"
+        )

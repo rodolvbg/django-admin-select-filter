@@ -1,0 +1,45 @@
+# Spanish translation of django-admin-select-filter.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: django-admin-select-filter 0.1.0\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 2026-09-29 17:55+0200\n"
+"PO-Revision-Date: 2026-09-29 18:00+0200\n"
+"Last-Translator: Rodolfo Becerra\n"
+"Language-Team: Spanish\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=3; plural=n == 1 ? 0 : n != 0 && n % 1000000 == 0 ? "
+"1 : 2;\n"
+
+#: filters.py
+msgid "All"
+msgstr "Todo"
+
+#: templates/admin_select_filter/filters/base.html
+#, python-format
+msgid " By %(filter_title)s "
+msgstr " Por %(filter_title)s "
+
+#: templates/admin_select_filter/filters/base.html
+msgid "Search"
+msgstr "Buscar"
+
+#: views.py
+msgid "app_label, model_name and parameter_name are required."
+msgstr "app_label, model_name y parameter_name son obligatorios."
+
+#: views.py
+msgid "The requested admin model was not found."
+msgstr "No se encontró el modelo del admin solicitado."
+
+#: views.py
+msgid "Forbidden."
+msgstr "Prohibido."
+
+#: views.py
+msgid "The requested admin filter was not found."
+msgstr "No se encontró el filtro del admin solicitado."

@@ -4,6 +4,11 @@
 
 ### Added
 
+- Spanish translation (`locale/es`), and the API error messages are now
+  translatable.
+- Select2's messages ("No results found", "Searching…") follow the active
+  language: the filter loads Select2's translation file, as the admin's
+  autocomplete fields do.
 - Compatibility matrix via tox (`[tool.tox]` in `pyproject.toml`, using
   [tox-uv](https://github.com/tox-dev/tox-uv)): tests every Django series
   in `classifiers` (4.2 through 5.1) against its oldest and newest

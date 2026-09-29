@@ -75,3 +75,20 @@ envs). This only tests boundaries (oldest + newest Python per Django
 series), not every valid combination — that catches most real breakage
 while staying fast. Runs in CI as a separate `compat-matrix.yml`
 workflow, alongside the regular `pytest.yml`.
+
+## Translations
+
+Catalogs live in `src/django_admin_select_filter/locale/`. After changing
+translatable text, from that package directory:
+
+```bash
+cd src/django_admin_select_filter
+DJANGO_SETTINGS_MODULE=tests.settings PYTHONPATH=../.. \
+  uv run django-admin makemessages -l es --no-obsolete --add-location file
+# translate the new/changed entries in locale/es/LC_MESSAGES/django.po, then:
+DJANGO_SETTINGS_MODULE=tests.settings PYTHONPATH=../.. \
+  uv run django-admin compilemessages
+```
+
+Commit both the `.po` and the compiled `.mo`. `tests/test_i18n.py` fails if
+an entry is untranslated or fuzzy, or if a `.mo` is older than its `.po`.

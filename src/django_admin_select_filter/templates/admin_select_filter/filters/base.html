@@ -12,6 +12,10 @@
       data-jquery-url="{% static 'admin/js/vendor/jquery/jquery.min.js' %}"
       data-jquery-init-url="{% static 'admin/js/jquery.init.js' %}"
       data-select2-url="{% static 'admin/js/vendor/select2/select2.full.js' %}"
+      {% if spec.select2_i18n_url %}
+        data-select2-i18n-url="{{ spec.select2_i18n_url }}"
+        data-language="{{ spec.select2_language }}"
+      {% endif %}
       data-parameter-name="{{ spec.parameter_name }}"
       {% if not spec.searchable %}data-searchable="false"{% endif %}
       {% if spec.async_call %}
