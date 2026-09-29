@@ -18,10 +18,15 @@ def po_entries(path: Path) -> list[tuple[str, str, bool]]:
     """``(msgid, msgstr, fuzzy)`` for every message of a .po file."""
     entries = []
     for block in path.read_text(encoding="utf-8").split("\n\n"):
-        msgid = "".join(re.findall(r'^(?:msgid|")\s*"?(.*?)"$', block, re.M)[:1])
-        if not re.search(r"^msgid ", block, re.M) or 'msgid ""\nmsgstr ""' in block:
+        msgid = "".join(
+            re.findall(r'^(?:msgid|")\s*"?(.*?)"$', block, re.MULTILINE)[:1]
+        )
+        if (
+            not re.search(r"^msgid ", block, re.MULTILINE)
+            or 'msgid ""\nmsgstr ""' in block
+        ):
             continue
-        msgstrs = re.findall(r'^msgstr(?:\[\d+\])? "(.*)"$', block, re.M)
+        msgstrs = re.findall(r'^msgstr(?:\[\d+\])? "(.*)"$', block, re.MULTILINE)
         entries.append((msgid, " ".join(msgstrs), "#, fuzzy" in block))
     return entries
 
