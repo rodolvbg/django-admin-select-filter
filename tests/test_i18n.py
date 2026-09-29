@@ -1,7 +1,9 @@
+import ast
+import gettext
 import re
 from pathlib import Path
 from types import SimpleNamespace
-from typing import cast
+from typing import Any, cast
 
 from django.contrib.auth.models import User
 from django.test import TestCase
@@ -31,6 +33,43 @@ def po_entries(path: Path) -> list[tuple[str, str, bool]]:
     return entries
 
 
+PO_LINE = re.compile(r'^(msgctxt|msgid_plural|msgid|msgstr(?:\[\d+\])?) (".*")$')
+
+
+def po_messages(path):
+    """``{msgid: msgstr}`` (``{(msgid, n): msgstr}`` for plurals) of a .po file."""
+    messages: dict[Any, str] = {}
+    for block in path.read_text(encoding="utf-8").split("\n\n"):
+        fields: dict[str, str] = {}
+        key = None
+        for line in block.splitlines():
+            match = PO_LINE.match(line)
+            if match:
+                key = match.group(1)
+                fields[key] = ast.literal_eval(match.group(2))
+            elif line.startswith('"') and key:
+                fields[key] += ast.literal_eval(line)
+        msgid = fields.get("msgid")
+        if not msgid or "#, fuzzy" in block:
+            continue
+        if "msgctxt" in fields:
+            msgid = f"{fields['msgctxt']}\x04{msgid}"
+        if "msgid_plural" in fields:
+            for name, value in fields.items():
+                if name.startswith("msgstr["):
+                    messages[(msgid, int(name[7:-1]))] = value
+        else:
+            messages[msgid] = fields["msgstr"]
+    return messages
+
+
+def mo_messages(path):
+    """The same, from the compiled .mo (as Django will load it)."""
+    with path.open("rb") as file:
+        catalog = getattr(gettext.GNUTranslations(file), "_catalog")  # noqa: B009
+    return {key: value for key, value in catalog.items() if key != ""}
+
+
 class TranslationCatalogTests(TestCase):
     def test_every_message_is_translated(self):
         catalogs = list(LOCALE_DIR.glob("*/LC_MESSAGES/django.po"))
@@ -42,11 +81,13 @@ class TranslationCatalogTests(TestCase):
                     self.assertFalse(fuzzy, "fuzzy")
 
     def test_compiled_catalogs_are_shipped(self):
+        """The shipped .mo has exactly the .po's translations (not compared by
+        date: a git checkout gives both files arbitrary modification times)."""
         for catalog in LOCALE_DIR.glob("*/LC_MESSAGES/django.po"):
             with self.subTest(catalog=str(catalog)):
                 mo = catalog.with_suffix(".mo")
                 self.assertTrue(mo.exists())
-                self.assertGreaterEqual(mo.stat().st_mtime, catalog.stat().st_mtime)
+                self.assertEqual(mo_messages(mo), po_messages(catalog))
 
 
 class SpanishChangelistTests(TestCase):
