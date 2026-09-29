@@ -14,6 +14,8 @@ from django.utils.functional import cached_property
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext
 
+from django_admin_select_filter.types import Choices
+
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from typing import Any, ClassVar
@@ -305,8 +307,8 @@ class BaseSelectFilter(SimpleListFilter):
     def _build_async_options(
         self,
         request: HttpRequest,
-        items: list[tuple[str, str]],
-    ) -> list[tuple[str, str]]:
+        items: Choices,
+    ) -> Choices:
         """Assemble the "All"/items/null options, applying facet counts if asked.
 
         The "All" option is skipped when ``multiple`` is enabled: clearing
@@ -385,11 +387,11 @@ class BaseSelectFilter(SimpleListFilter):
         self,
         request: HttpRequest | None = None,
         q: str = "",
-    ) -> list[tuple[str, str]]:
+    ) -> Choices:
         """Return every available option as ``(key, label)`` string pairs."""
         raise NotImplementedError
 
-    def _selected_option_items(self) -> list[tuple[str, str]]:
+    def _selected_option_items(self) -> Choices:
         """Return only the currently selected options, as ``(key, label)`` pairs."""
         raise NotImplementedError
 
@@ -397,7 +399,7 @@ class BaseSelectFilter(SimpleListFilter):
         self,
         request: HttpRequest,
         q: str,
-    ) -> list[tuple[str, str]]:
+    ) -> Choices:
         """Return Select2 options for an API request and its search term."""
         return self._build_async_options(
             request, self._option_items(request=request, q=q)
@@ -407,7 +409,7 @@ class BaseSelectFilter(SimpleListFilter):
         self,
         request: HttpRequest,
         model_admin: ModelAdmin[Any],
-    ) -> list[tuple[str, str]]:
+    ) -> Choices:
         """Return choices rendered initially by Django's list-filter template."""
         options = (
             self._selected_option_items() if self.async_call else self._option_items()
@@ -519,14 +521,14 @@ class ForeignKeyFilter(BaseSelectFilter):
         self,
         request: HttpRequest | None = None,
         q: str = "",
-    ) -> list[tuple[str, str]]:
+    ) -> Choices:
         """Return every available option as ``(key, label)`` string pairs."""
         return [
             (str(instance.pk), str(instance))
             for instance in self.get_options(request=request, q=q)
         ]
 
-    def _selected_option_items(self) -> list[tuple[str, str]]:
+    def _selected_option_items(self) -> Choices:
         """Return only the currently selected options, as ``(key, label)`` pairs."""
         assert self.model is not None
         selected_pks = [
@@ -623,14 +625,14 @@ class ChoiceFilter(BaseSelectFilter):
         self,
         request: HttpRequest | None = None,
         q: str = "",
-    ) -> list[tuple[str, str]]:
+    ) -> Choices:
         """Return every available option as ``(key, label)`` string pairs."""
         return [
             (str(value), label)
             for value, label in self.get_options(request=request, q=q)
         ]
 
-    def _selected_option_items(self) -> list[tuple[str, str]]:
+    def _selected_option_items(self) -> Choices:
         """Return only the currently selected options, as ``(key, label)`` pairs."""
         assert self.options is not None
         selected_values = [
