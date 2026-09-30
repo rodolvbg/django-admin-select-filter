@@ -458,6 +458,31 @@ class BaseSelectFilterTests(TestCase):
             result = filter_instance.queryset(request, all_books)
             self.assertEqual(list(result.values_list("title", flat=True)), ["Orphan"])
 
+    def test_select2_theme(self):
+        from unittest import mock
+
+        with self.subTest("Select2's default without Unfold"):
+            filter_instance = self._build()
+            self.assertIsNone(filter_instance.select2_theme)
+            self.assertNotIn("autocomplete.css", str(filter_instance.media["css"]))
+
+        with self.subTest("the admin's autocomplete theme with Unfold"):
+            with mock.patch(
+                "django_admin_select_filter.filters.apps.is_installed",
+                side_effect=lambda app: app == "unfold",
+            ):
+                filter_instance = self._build()
+                self.assertEqual(filter_instance.select2_theme, "admin-autocomplete")
+                css_html = str(filter_instance.media["css"])
+            self.assertIn('href="/static/admin/css/autocomplete.css"', css_html)
+            self.assertLess(
+                css_html.index("select2.css"), css_html.index("autocomplete.css")
+            )
+
+        with self.subTest("an explicit theme wins"):
+            filter_instance = self._build(theme="classic")
+            self.assertEqual(filter_instance.select2_theme, "classic")
+
     def test_media(self):
         with self.subTest("css is always the same"):
             filter_instance = self._build()
@@ -838,6 +863,15 @@ class ForeignKeyFilterTests(TestCase):
         assert 'class="django-admin-select-filter"' in html
         assert 'data-parameter-name="author"' in html
         assert "Rowling" in html
+        assert "data-theme" not in html
+
+        filter_instance.theme = "admin-autocomplete"
+        html = render_to_string(
+            filter_instance.template,
+            {"spec": filter_instance, "title": filter_instance.title, "choices": []},
+            request=request,
+        )
+        assert 'data-theme="admin-autocomplete"' in html
 
     def test_template_renders_multiple_select_markup(self):
         author = Author.objects.create(name="Rowling")

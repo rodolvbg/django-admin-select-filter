@@ -132,6 +132,9 @@ Both filters share the same options: `filter_only_used_values`, `async_call`,
 `ForeignKeyFilter`, the `model` — by walking each `__`-separated relation in
 turn, forward or reverse.
 
+`theme` sets the Select2 theme; by default Select2's own, styled like the
+admin (or `admin-autocomplete` with [django-unfold](docs/themes/unfold.md)).
+
 Set `searchable = False` to hide the search input entirely and get a plain
 dropdown instead — best for a short, static option list.
 
@@ -227,6 +230,11 @@ startup), turning that per-request scan into a single dict lookup. The
 trade-off: it calls `get_list_filter(request=None)` while building the
 cache, so a `get_list_filter()` override that depends on the request isn't
 supported in this mode.
+
+## Themes
+
+- [django-unfold](docs/themes/unfold.md): works as it is, with Unfold's
+  Select2 styles.
 
 ## Translations
 

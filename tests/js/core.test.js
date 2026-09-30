@@ -61,6 +61,19 @@ describe("core", () => {
 		expect(on).toHaveBeenCalledWith("select2:select", expect.any(Function));
 	});
 
+	it("passes the filter's Select2 theme", async () => {
+		addFilter('data-theme="admin-autocomplete"');
+		const { select2 } = installDjangoJQuery();
+		await import(modulePath);
+		await fireDomReady();
+
+		expect(select2).toHaveBeenCalledWith({
+			placeholder: "Search",
+			width: "100%",
+			theme: "admin-autocomplete",
+		});
+	});
+
 	it("navigates to the selected choice by default", async () => {
 		addFilter();
 		const { on } = installDjangoJQuery();

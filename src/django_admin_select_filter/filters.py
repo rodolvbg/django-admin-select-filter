@@ -4,6 +4,7 @@ import functools
 import json
 from typing import TYPE_CHECKING
 
+from django.apps import apps
 from django.contrib.admin.filters import SimpleListFilter
 from django.contrib.admin.widgets import get_select2_language
 from django.core.exceptions import FieldDoesNotExist
@@ -165,6 +166,8 @@ class BaseSelectFilter(SimpleListFilter):
     null_value: ClassVar[str] = "__null__"
     multiple: ClassVar[bool] = False
     multiple_separator: ClassVar[str] = ","
+    #: Select2 theme; ``None`` picks one for the admin (see ``select2_theme``).
+    theme: ClassVar[str | None] = None
     async_call_url: str | None = None
     title: Any | None = None
     parameter_name: str | None = None
@@ -201,6 +204,15 @@ class BaseSelectFilter(SimpleListFilter):
     def select2_language(self) -> str | None:
         """Select2 language code for the active language, if Select2 has one."""
         return get_select2_language()
+
+    @property
+    def select2_theme(self) -> str | None:
+        """``theme``, or with django-unfold its styled "admin-autocomplete"
+        (the theme of the admin's autocomplete widgets); else Select2's
+        default, styled by this package."""
+        if self.theme:
+            return self.theme
+        return "admin-autocomplete" if apps.is_installed("unfold") else None
 
     @property
     def select2_i18n_url(self) -> str | None:
@@ -247,15 +259,12 @@ class BaseSelectFilter(SimpleListFilter):
             js.append(
                 _module_script("admin_select_filter/js/multiple_navigation.js", request)
             )
-        return Media(
-            css={
-                "all": [
-                    "admin/css/vendor/select2/select2.css",
-                    "admin_select_filter/css/admin_select2_filter.css",
-                ]
-            },
-            js=js,
-        )
+        css = ["admin/css/vendor/select2/select2.css"]
+        if self.select2_theme == "admin-autocomplete":
+            # The layout of the admin's autocomplete widgets.
+            css.append("admin/css/autocomplete.css")
+        css.append("admin_select_filter/css/admin_select2_filter.css")
+        return Media(css={"all": css}, js=js)
 
     def _is_nullable(self, admin_model: type[models.Model]) -> bool:
         """Determine whether the configured field accepts null values."""

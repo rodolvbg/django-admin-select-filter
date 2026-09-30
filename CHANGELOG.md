@@ -4,6 +4,10 @@
 
 ### Added
 
+- django-unfold support: with `unfold` installed, the filters use the
+  admin's `admin-autocomplete` Select2 theme, which Unfold styles; `theme`
+  sets it per filter.
+
 - Spanish translation (`locale/es`), and the API error messages are now
   translatable.
 - Select2's messages ("No results found", "Searching…") follow the active

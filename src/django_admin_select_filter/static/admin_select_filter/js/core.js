@@ -85,6 +85,9 @@ async function initializeFilters() {
 		if (element.dataset.language) {
 			options.language = element.dataset.language;
 		}
+		if (element.dataset.theme) {
+			options.theme = element.dataset.theme;
+		}
 		for (const plugin of plugins) {
 			if (plugin.appliesTo(element)) plugin.extendOptions?.(element, options);
 		}

@@ -17,6 +17,7 @@
         data-language="{{ spec.select2_language }}"
       {% endif %}
       data-parameter-name="{{ spec.parameter_name }}"
+      {% if spec.select2_theme %}data-theme="{{ spec.select2_theme }}"{% endif %}
       {% if not spec.searchable %}data-searchable="false"{% endif %}
       {% if spec.async_call %}
         data-async-call="true"

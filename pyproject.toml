@@ -43,6 +43,7 @@ urls.Repository = "https://github.com/rodolvbg/django-admin-select-filter"
 dev = [ "django-stubs>=5", "mypy>=1.11", "pre-commit>=4", "ruff>=0.6", "tox>=4", "tox-uv>=1" ]
 test = [
   "django-stubs-ext>=5",
+  "django-unfold>=0.108; python_version>='3.12'",
   "inline-snapshot>=0.20.10",
   "inline-snapshot-django>=1.1",
   "playwright>=1.62",
