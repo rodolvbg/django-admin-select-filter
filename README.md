@@ -8,7 +8,7 @@
 
 Select2-powered admin list filters for Django.
 
-![Select2 filters in the admin sidebar](docs/screenshots/hero.png)
+![Select2 filters in the admin sidebar](https://github.com/rodolvbg/django-admin-select-filter/blob/master/docs/screenshots/hero.png)
 
 ## Install
 
@@ -54,7 +54,7 @@ class BookAdmin(admin.ModelAdmin):
     list_filter = [GenreFilter, StatusFilter]
 ```
 
-![ChoiceFilter dropdown open, listing Fiction/Non-fiction](docs/screenshots/choice-filter.png)
+![ChoiceFilter dropdown open, listing Fiction/Non-fiction](https://github.com/rodolvbg/django-admin-select-filter/blob/master/docs/screenshots/choice-filter.png)
 
 Since `options` accepts any explicit `(value, label)` list, `ChoiceFilter`
 can even filter a `ForeignKey` — pass one pair per related row:
@@ -91,7 +91,7 @@ class BookAdmin(admin.ModelAdmin):
     list_filter = [AuthorFilter]
 ```
 
-![ForeignKeyFilter dropdown with a search box, listing authors](docs/screenshots/foreign-key-filter.png)
+![ForeignKeyFilter dropdown with a search box, listing authors](https://github.com/rodolvbg/django-admin-select-filter/blob/master/docs/screenshots/foreign-key-filter.png)
 
 `model` is only needed when it can't be inferred. By default it's resolved by
 walking `parameter_name` across `Book`'s relations, following a nested lookup
@@ -133,7 +133,7 @@ Both filters share the same options: `filter_only_used_values`, `async_call`,
 turn, forward or reverse.
 
 `theme` sets the Select2 theme; by default Select2's own, styled like the
-admin (or `admin-autocomplete` with [django-unfold](docs/themes/unfold.md)).
+admin (or `admin-autocomplete` with [django-unfold](https://github.com/rodolvbg/django-admin-select-filter/blob/master/docs/themes/unfold.md)).
 
 Set `searchable = False` to hide the search input entirely and get a plain
 dropdown instead — best for a short, static option list.
@@ -146,7 +146,7 @@ class AuthorFilter(ForeignKeyFilter):
     multiple = True
 ```
 
-![multiple = True with two selected author chips](docs/screenshots/multiple.png)
+![multiple = True with two selected author chips](https://github.com/rodolvbg/django-admin-select-filter/blob/master/docs/screenshots/multiple.png)
 
 Selected values are joined in the query string with `multiple_separator`
 (`","` by default) and applied with an `__in` lookup, so configured values
@@ -233,7 +233,7 @@ supported in this mode.
 
 ## Themes
 
-- [django-unfold](docs/themes/unfold.md): works as it is, with Unfold's
+- [django-unfold](https://github.com/rodolvbg/django-admin-select-filter/blob/master/docs/themes/unfold.md): works as it is, with Unfold's
   Select2 styles.
 
 ## Translations
@@ -245,5 +245,5 @@ admin's autocomplete fields use for the active language.
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, running the
+See [CONTRIBUTING.md](https://github.com/rodolvbg/django-admin-select-filter/blob/master/CONTRIBUTING.md) for development setup, running the
 test suite (including the browser-driven e2e tests), and pre-commit hooks.
