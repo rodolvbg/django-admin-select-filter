@@ -74,6 +74,21 @@ describe("core", () => {
 		});
 	});
 
+	it("opens the dropdown inside a panel that traps the focus (Unfold)", async () => {
+		addFilter();
+		const trap = document.createElement("div");
+		trap.setAttribute("x-trap.noautofocus.noscroll", "filterModalOpen");
+		const select = document.querySelector("select");
+		select.before(trap);
+		trap.append(select);
+		const { jquery, select2 } = installDjangoJQuery();
+		await import(modulePath);
+		await fireDomReady();
+
+		expect(jquery).toHaveBeenCalledWith(trap);
+		expect(select2.mock.calls[0][0]).toHaveProperty("dropdownParent");
+	});
+
 	it("navigates to the selected choice by default", async () => {
 		addFilter();
 		const { on } = installDjangoJQuery();

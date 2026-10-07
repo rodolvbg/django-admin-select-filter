@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `ForeignKeyFilter.admin_autocomplete`: the options load from the admin's
+  autocomplete endpoint (`admin:autocomplete`), without adding
+  `django_admin_select_filter_path()` to the URLs.
+
+### Fixed
+
+- With django-unfold, the search box of a filter couldn't be typed in: its
+  dropdown now opens inside Unfold's filter panel, which traps the focus.
+
 ## [0.1.3] - 2026-10-07
 
 ### Fixed

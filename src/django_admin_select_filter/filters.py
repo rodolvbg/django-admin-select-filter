@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from django.apps import apps
 from django.contrib.admin.filters import SimpleListFilter
 from django.contrib.admin.widgets import get_select2_language
-from django.core.exceptions import FieldDoesNotExist
+from django.core.exceptions import FieldDoesNotExist, ImproperlyConfigured
 from django.db import models
 from django.forms import Media
 from django.templatetags.static import static
@@ -461,6 +461,15 @@ class ForeignKeyFilter(BaseSelectFilter):
     ``only``
         Related-model fields loaded by the options queryset. Include every
         field needed by the model's string representation.
+    ``admin_autocomplete``
+        When true, Select2 loads and searches the options from the admin's
+        own autocomplete endpoint (``admin:autocomplete``, the one of
+        ``autocomplete_fields``) — no ``django_admin_select_filter_path()``
+        needed. ``parameter_name`` must end in a forward ``ForeignKey`` or
+        ``ManyToManyField``, and the related model needs a ``ModelAdmin``
+        with ``search_fields`` on the site. It searches every related object
+        (``filter_only_used_values`` doesn't apply) and has no facet counts.
+        It defaults to false.
 
     ``all_value`` and ``null_value`` are reserved values used by the async API
     for the translated “All” option and the null option, respectively. They can
@@ -471,6 +480,10 @@ class ForeignKeyFilter(BaseSelectFilter):
     model: type[models.Model] | None = None
     ordering: ClassVar[list[str]] = []
     only: ClassVar[list[str]] = []
+    admin_autocomplete: ClassVar[bool] = False
+    #: With ``admin_autocomplete``: the relation field the admin's endpoint is
+    #: asked about (``app_label``, ``model_name``, ``field_name``).
+    autocomplete_source: dict[str, str] | None = None
 
     def __init__(
         self,
@@ -494,7 +507,40 @@ class ForeignKeyFilter(BaseSelectFilter):
                 registered_admin.model if registered_admin is not None else self.model
             )
             self.title = title_model._meta.verbose_name_plural
+        if self.admin_autocomplete:
+            self._use_admin_autocomplete(request, admin_model, model_admin)
         super().__init__(request, params, admin_model, model_admin)
+
+    def _use_admin_autocomplete(
+        self,
+        request: HttpRequest,
+        admin_model: type[models.Model],
+        model_admin: ModelAdmin[Any],
+    ) -> None:
+        """Load the options from the admin's autocomplete endpoint."""
+        assert self.model is not None
+        field = self._resolve_field(admin_model)
+        name = type(self).__name__
+        if not isinstance(field, models.ForeignKey | models.ManyToManyField):
+            raise ImproperlyConfigured(
+                f"{name}.admin_autocomplete needs {self.parameter_name!r} to end "
+                "in a ForeignKey or a ManyToManyField."
+            )
+        site = model_admin.admin_site
+        related_admin = site._registry.get(self.model)
+        if related_admin is None or not related_admin.get_search_fields(request):
+            raise ImproperlyConfigured(
+                f"{name}.admin_autocomplete needs a ModelAdmin with "
+                f"search_fields for {self.model.__name__} on the "
+                f"{site.name!r} admin site."
+            )
+        self.async_call = True  # type: ignore[misc]
+        self.async_call_url = reverse(f"{site.name}:autocomplete")
+        self.autocomplete_source = {
+            "app_label": field.model._meta.app_label,
+            "model_name": field.model._meta.model_name or "",
+            "field_name": field.name,
+        }
 
     def _resolve_model(
         self, admin_model: type[models.Model]

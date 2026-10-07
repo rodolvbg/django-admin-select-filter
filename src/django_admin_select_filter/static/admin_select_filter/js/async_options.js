@@ -1,10 +1,46 @@
 import { registerPlugin } from "core";
 
+/**
+ * admin_autocomplete: the admin's own endpoint (the one of
+ * autocomplete_fields), asked about the filter's relation field. It returns
+ * related objects only, so "All" and the empty option are added here, on
+ * the first page of an empty search.
+ */
+function adminAutocomplete(element) {
+	const { dataset } = element;
+	return {
+		url: dataset.apiUrl,
+		data: (params) => ({
+			term: params.term ?? "",
+			page: params.page ?? 1,
+			app_label: dataset.sourceAppLabel,
+			model_name: dataset.sourceModelName,
+			field_name: dataset.sourceFieldName,
+		}),
+		processResults: (data, params) => {
+			const results = [...data.results];
+			if (!params.term && (params.page ?? 1) === 1) {
+				if (dataset.nullValue) {
+					results.unshift({ id: dataset.nullValue, text: "-" });
+				}
+				if (dataset.multiple !== "true") {
+					results.unshift({ id: dataset.allValue, text: dataset.allLabel });
+				}
+			}
+			return { results, pagination: data.pagination };
+		},
+	};
+}
+
 // Loaded only when a filter has async_call = True (see base.html).
 registerPlugin({
 	appliesTo: (element) => element.dataset.asyncCall === "true",
 
 	extendOptions: (element, options) => {
+		if (element.dataset.adminAutocomplete === "true") {
+			options.ajax = adminAutocomplete(element);
+			return;
+		}
 		options.ajax = {
 			url: element.dataset.apiUrl,
 			data: (params) => ({

@@ -69,6 +69,8 @@ function bindDefaultNavigation(select) {
 	});
 }
 
+const FOCUS_TRAP = "[x-trap\\.noautofocus\\.noscroll]";
+
 async function initializeFilters() {
 	const filters = document.querySelectorAll(".django-admin-select-filter");
 	if (!filters.length) return;
@@ -87,6 +89,12 @@ async function initializeFilters() {
 		}
 		if (element.dataset.theme) {
 			options.theme = element.dataset.theme;
+		}
+		// Inside a panel that traps the focus (django-unfold's filters), the
+		// dropdown must open inside it too, or its search box can't be typed in.
+		const trap = element.closest(FOCUS_TRAP);
+		if (trap) {
+			options.dropdownParent = $(trap);
 		}
 		for (const plugin of plugins) {
 			if (plugin.appliesTo(element)) plugin.extendOptions?.(element, options);

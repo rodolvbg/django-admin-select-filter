@@ -6,8 +6,9 @@ Works with [django-unfold](https://unfoldadmin.com/) as it is: the filters
 render in Unfold's filter panel, and when `unfold` is in `INSTALLED_APPS`
 they use the Select2 theme of the admin's autocomplete fields
 (`admin-autocomplete`), which Unfold styles, light and dark. Set `theme` on
-a filter to choose another Select2 theme yourself. Tested with django-unfold
-0.108.
+a filter to choose another Select2 theme yourself. The dropdowns open
+inside Unfold's filter panel, so their search box can be typed in, and
+`admin_autocomplete` works there too. Tested with django-unfold 0.108.
 
 ## Screenshots
 

@@ -26,6 +26,14 @@
         data-model-name="{{ spec.admin_model_name }}"
         data-facets="{{ spec.facets|yesno:'true,false' }}"
         data-all-value="{{ spec.all_value }}"
+        {% if spec.autocomplete_source %}
+          data-admin-autocomplete="true"
+          data-source-app-label="{{ spec.autocomplete_source.app_label }}"
+          data-source-model-name="{{ spec.autocomplete_source.model_name }}"
+          data-source-field-name="{{ spec.autocomplete_source.field_name }}"
+          data-all-label="{% translate 'All' %}"
+          {% if spec.nullable %}data-null-value="{{ spec.null_value }}"{% endif %}
+        {% endif %}
       {% endif %}
       {% if spec.multiple %}
         multiple

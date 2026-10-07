@@ -108,4 +108,67 @@ describe("async_options", () => {
 		selectHandler({ params: { data: { id: "#selected" } } });
 		expect(window.location.hash).toBe("#selected");
 	});
+
+	it("asks the admin's autocomplete endpoint with admin_autocomplete", async () => {
+		addAsyncFilter(`
+			data-admin-autocomplete="true"
+			data-source-app-label="testapp"
+			data-source-model-name="book"
+			data-source-field-name="author"
+			data-all-label="All"
+			data-null-value="__null__"
+		`);
+		document.querySelector("select").dataset.apiUrl = "/admin/autocomplete/";
+		const { select2 } = installDjangoJQuery();
+		await import(asyncOptionsPath);
+		await import(corePath);
+		await fireDomReady();
+
+		const { ajax } = select2.mock.calls[0][0];
+		expect(ajax.url).toBe("/admin/autocomplete/");
+		expect(ajax.data({ term: "row", page: 2 })).toEqual({
+			term: "row",
+			page: 2,
+			app_label: "testapp",
+			model_name: "book",
+			field_name: "author",
+		});
+		expect(ajax.data({})).toMatchObject({ term: "", page: 1 });
+
+		const data = {
+			results: [{ id: "7", text: "Rowling" }],
+			pagination: { more: true },
+		};
+		// First page of an empty search: "All" and the empty option first.
+		expect(ajax.processResults(data, {})).toEqual({
+			results: [
+				{ id: "__all__", text: "All" },
+				{ id: "__null__", text: "-" },
+				{ id: "7", text: "Rowling" },
+			],
+			pagination: { more: true },
+		});
+		// Searching, or a later page: only the endpoint's results.
+		expect(ajax.processResults(data, { term: "row" }).results).toEqual(
+			data.results,
+		);
+		expect(ajax.processResults(data, { page: 2 }).results).toEqual(
+			data.results,
+		);
+	});
+
+	it("leaves out All for a multiple filter, and the empty option when not nullable", async () => {
+		addAsyncFilter(`
+			data-admin-autocomplete="true"
+			data-multiple="true"
+			data-all-label="All"
+		`);
+		const { select2 } = installDjangoJQuery();
+		await import(asyncOptionsPath);
+		await import(corePath);
+		await fireDomReady();
+
+		const { ajax } = select2.mock.calls[0][0];
+		expect(ajax.processResults({ results: [] }, {}).results).toEqual([]);
+	});
 });

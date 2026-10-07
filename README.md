@@ -231,6 +231,30 @@ trade-off: it calls `get_list_filter(request=None)` while building the
 cache, so a `get_list_filter()` override that depends on the request isn't
 supported in this mode.
 
+
+### With the admin's autocomplete (`admin_autocomplete = True`)
+
+A `ForeignKeyFilter` can load its options from the admin's own
+autocomplete endpoint instead — the one `autocomplete_fields` uses, already
+routed by `admin.site.urls` — so there's no
+`django_admin_select_filter_path()` to add:
+
+```python
+class AuthorFilter(ForeignKeyFilter):
+    parameter_name = "author"
+    admin_autocomplete = True  # implies async_call
+```
+
+The related model needs a `ModelAdmin` with `search_fields` on the site:
+the search is that admin's, with its permissions and the foreign key's
+`limit_choices_to`, paginated as you scroll. "All" and the empty option
+(when the field is nullable) are added by the filter. Compared with the
+package's own endpoint, it searches every related object
+(`filter_only_used_values` doesn't apply), has no facet counts, and only
+works on relations (`parameter_name` ending in a `ForeignKey` or a
+`ManyToManyField`, nested lookups too): `ChoiceFilter` keeps using
+`async_call`.
+
 ## Themes
 
 - [django-unfold](docs/themes/unfold.md): works as it is, with Unfold's
