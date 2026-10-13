@@ -32,7 +32,7 @@
           data-source-model-name="{{ spec.autocomplete_source.model_name }}"
           data-source-field-name="{{ spec.autocomplete_source.field_name }}"
           data-all-label="{% translate 'All' %}"
-          {% if spec.nullable %}data-null-value="{{ spec.null_value }}"{% endif %}
+          {% if spec.nullable %}data-null-value="{{ spec.null_value }}" data-null-label="{{ spec.null_label_display }}"{% endif %}
         {% endif %}
       {% endif %}
       {% if spec.multiple %}

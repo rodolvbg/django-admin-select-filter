@@ -21,7 +21,10 @@ function adminAutocomplete(element) {
 			const results = [...data.results];
 			if (!params.term && (params.page ?? 1) === 1) {
 				if (dataset.nullValue) {
-					results.unshift({ id: dataset.nullValue, text: "-" });
+					results.unshift({
+						id: dataset.nullValue,
+						text: dataset.nullLabel ?? "-",
+					});
 				}
 				if (dataset.multiple !== "true") {
 					results.unshift({ id: dataset.allValue, text: dataset.allLabel });

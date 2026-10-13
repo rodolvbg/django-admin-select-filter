@@ -127,8 +127,13 @@ class BaseSelectFilter(SimpleListFilter):
         When false, hide Select2's search input and behave like a plain
         dropdown. Best for a short, static option list. It defaults to true.
     ``nullable``
-        Controls whether the ``-`` option is available. When left as ``None``,
-        the value is inferred from the configured model field.
+        Controls whether the empty-value option is available. When left as
+        ``None``, the value is inferred from the configured model field.
+    ``null_label``
+        Text of the empty-value option. When left as ``None``, the admin's
+        own empty value display is used (``ModelAdmin.empty_value_display``,
+        ``"-"`` by default), as Django's list filters do. Override
+        ``get_null_label(request)`` to choose it per request.
     ``title``
         Label shown by Django above the filter. By default it uses the related
         model admin's plural verbose name.
@@ -164,6 +169,7 @@ class BaseSelectFilter(SimpleListFilter):
     nullable: bool | None = None
     all_value: ClassVar[str] = "__all__"
     null_value: ClassVar[str] = "__null__"
+    null_label: ClassVar[Any] = None
     multiple: ClassVar[bool] = False
     multiple_separator: ClassVar[str] = ","
     #: Select2 theme; ``None`` picks one for the admin (see ``select2_theme``).
@@ -194,6 +200,23 @@ class BaseSelectFilter(SimpleListFilter):
             self.async_call_url = reverse(f"admin_select_filter:{ASYNC_CALL_URL_NAME}")
 
         super().__init__(request, params, admin_model, model_admin)
+
+    def get_null_label(self, request: HttpRequest | None) -> str:
+        """Text of the empty-value option: ``null_label``, else the admin's
+        empty value display (``"-"`` by default)."""
+        if self.null_label is not None:
+            return str(self.null_label)
+        get_empty_value_display = getattr(
+            getattr(self, "model_admin", None), "get_empty_value_display", None
+        )
+        return (
+            str(get_empty_value_display()) if callable(get_empty_value_display) else "-"
+        )
+
+    @property
+    def null_label_display(self) -> str:
+        """The empty-value option's text for the changelist request."""
+        return self.get_null_label(getattr(self, "request", None))
 
     @cached_property
     def model_admin_queryset(self) -> models.QuerySet[Any]:
@@ -343,7 +366,7 @@ class BaseSelectFilter(SimpleListFilter):
             list(items) if self.multiple else [(self.all_value, gettext("All")), *items]
         )
         if self._has_null_option():
-            options.append((self.null_value, "-"))
+            options.append((self.null_value, self.get_null_label(request)))
         if request.GET.get("facets") == "true":
             facet_counts = self._get_option_facet_counts()
             options = [
@@ -440,7 +463,7 @@ class BaseSelectFilter(SimpleListFilter):
             self._selected_option_items() if self.async_call else self._option_items()
         )
         if self.has_null_option:
-            options.append((self.null_value, "-"))
+            options.append((self.null_value, self.get_null_label(request)))
         return options
 
 

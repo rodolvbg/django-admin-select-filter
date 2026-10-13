@@ -117,6 +117,7 @@ describe("async_options", () => {
 			data-source-field-name="author"
 			data-all-label="All"
 			data-null-value="__null__"
+			data-null-label="No author"
 		`);
 		document.querySelector("select").dataset.apiUrl = "/admin/autocomplete/";
 		const { select2 } = installDjangoJQuery();
@@ -143,7 +144,7 @@ describe("async_options", () => {
 		expect(ajax.processResults(data, {})).toEqual({
 			results: [
 				{ id: "__all__", text: "All" },
-				{ id: "__null__", text: "-" },
+				{ id: "__null__", text: "No author" },
 				{ id: "7", text: "Rowling" },
 			],
 			pagination: { more: true },
@@ -155,6 +156,24 @@ describe("async_options", () => {
 		expect(ajax.processResults(data, { page: 2 }).results).toEqual(
 			data.results,
 		);
+	});
+
+	it("names the empty option - when no label is given", async () => {
+		addAsyncFilter(`
+			data-admin-autocomplete="true"
+			data-all-label="All"
+			data-null-value="__null__"
+		`);
+		const { select2 } = installDjangoJQuery();
+		await import(asyncOptionsPath);
+		await import(corePath);
+		await fireDomReady();
+
+		const { ajax } = select2.mock.calls[0][0];
+		expect(ajax.processResults({ results: [] }, {}).results[1]).toEqual({
+			id: "__null__",
+			text: "-",
+		});
 	});
 
 	it("leaves out All for a multiple filter, and the empty option when not nullable", async () => {

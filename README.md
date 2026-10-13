@@ -127,13 +127,24 @@ away if you pass it one, rather than fail silently later).
 ### Shared options
 
 Both filters share the same options: `filter_only_used_values`, `async_call`,
-`searchable`, `nullable` and `title`. Both also support a nested lookup for
+`searchable`, `nullable`, `null_label` and `title`. Both also support a nested lookup for
 `parameter_name` (e.g. `"author__status"`), resolving the field — and, for
 `ForeignKeyFilter`, the `model` — by walking each `__`-separated relation in
 turn, forward or reverse.
 
 `theme` sets the Select2 theme; by default Select2's own, styled like the
 admin (or `admin-autocomplete` with [django-unfold](docs/themes/unfold.md)).
+
+The empty-value option (when the field is nullable) reads like the rest of
+the admin: by default the `ModelAdmin`'s `empty_value_display` (`"-"`
+unless changed). Set `null_label` to name it, or override
+`get_null_label(request)` to choose it per request:
+
+```python
+class AuthorFilter(ForeignKeyFilter):
+    parameter_name = "author"
+    null_label = _("No author")
+```
 
 Set `searchable = False` to hide the search input entirely and get a plain
 dropdown instead — best for a short, static option list.

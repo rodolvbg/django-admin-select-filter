@@ -4,6 +4,8 @@
 
 ### Added
 
+- `null_label` / `get_null_label(request)`: the text of the empty-value
+  option, by default the admin's `empty_value_display` (`"-"`).
 - `ForeignKeyFilter.admin_autocomplete`: the options load from the admin's
   autocomplete endpoint (`admin:autocomplete`), without adding
   `django_admin_select_filter_path()` to the URLs.
