@@ -2,7 +2,14 @@ import re
 
 from django.contrib.auth.models import User
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
-from playwright.sync_api import Browser, Page, Playwright, expect, sync_playwright
+from playwright.sync_api import (
+    Browser,
+    Error,
+    Page,
+    Playwright,
+    expect,
+    sync_playwright,
+)
 
 from tests.testapp.models import Author, Book
 
@@ -28,6 +35,7 @@ class SelectFilterTests(StaticLiveServerTestCase):
         super().setUp()
         context = self.browser.new_context()
         self.addCleanup(context.close)
+        self.set_up_context(context)
         self.page = context.new_page()
 
         User.objects.create_superuser("admin", "admin@example.com", "password")
@@ -41,6 +49,9 @@ class SelectFilterTests(StaticLiveServerTestCase):
         tolkien = Author.objects.create(name="Tolkien")
         Book.objects.create(title="Harry Potter", author=rowling)
         Book.objects.create(title="The Hobbit", author=tolkien)
+
+    def set_up_context(self, context):
+        """Hook for subclasses, before the first page is opened."""
 
     def test_sync_filter_navigates_and_filters_results(self):
         self.page.goto(f"{self.live_server_url}/e2e-admin/testapp/book/")
@@ -100,3 +111,42 @@ class SpanishSelectFilterTests(SelectFilterTests):
         expect(self.page.locator(".select2-results__message")).to_have_text(
             "No se encontraron resultados"
         )
+
+
+class StrictContentSecurityPolicyTests(SelectFilterTests):
+    """Every test above, under a policy with no 'unsafe-inline' and no nonce:
+    the filters load from external scripts only."""
+
+    POLICY = (
+        "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:"
+    )
+    # Playwright's route.fetch() may resolve "localhost" to IPv6 (::1),
+    # where the test server doesn't listen.
+    host = "127.0.0.1"
+
+    def set_up_context(self, context):
+        self.violations: list[str] = []
+
+        def add_policy(route):
+            try:
+                response = route.fetch(max_redirects=0)
+                route.fulfill(
+                    response=response,
+                    headers={
+                        **response.headers,
+                        "content-security-policy": self.POLICY,
+                    },
+                )
+            except Error:
+                # The test ended, and its server or page closed, mid-request.
+                pass
+
+        def on_console(message):
+            if "Content Security Policy" in message.text and "script" in message.text:
+                self.violations.append(message.text)
+
+        context.route(f"{self.live_server_url}/**", add_policy)
+        # Before the context closes (cleanups run last in, first out).
+        self.addCleanup(context.unroute_all, behavior="ignoreErrors")
+        context.on("console", on_console)
+        self.addCleanup(lambda: self.assertEqual(self.violations, []))

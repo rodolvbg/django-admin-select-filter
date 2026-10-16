@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import functools
-import json
 from typing import TYPE_CHECKING
 
 from django.apps import apps
@@ -33,27 +32,31 @@ ASYNC_CALL_URL_NAME = "options"
 
 
 def _csp_nonce(request: HttpRequest | None) -> str | None:
-    """Return ``request.csp_nonce`` as a plain string, or ``None``.
+    """Return the request's CSP nonce as a plain string, or ``None``.
 
-    That attribute is set by Django's own CSP middleware (6.0+) and by the
-    third-party ``django-csp`` package alike, so this picks up either
+    Django's own CSP middleware (6.0+) keeps it in ``request._csp_nonce``
+    (read through ``django.middleware.csp.get_nonce()``), the third-party
+    ``django-csp`` package in ``request.csp_nonce``: this picks up either
     without a dependency on which one (or neither) a project uses.
 
     Not ``if nonce``: Django's own ``LazyNonce`` evaluates falsy until first
     accessed elsewhere, even though converting it here would happily
-    generate one — only its absence (a plain ``None``) means no CSP nonce
-    support is active at all.
+    generate one (and add it to the policy's header) — only its absence
+    (a plain ``None``) means no CSP nonce support is active at all.
     """
     nonce = getattr(request, "csp_nonce", None)
+    if nonce is None:
+        nonce = getattr(request, "_csp_nonce", None)
     return str(nonce) if nonce is not None else None
 
 
 def _module_script(path: str, request: HttpRequest | None) -> Any:
     """Render ``path`` as an ES module ``<script>`` tag for use in a ``Media.js`` list.
 
-    Adds a CSP nonce attribute from ``request.csp_nonce`` when present (see
-    :func:`_csp_nonce`) — needed for a ``script-src`` policy that doesn't
-    allow bare URLs without one.
+    Adds a CSP nonce attribute when the request has one (see
+    :func:`_csp_nonce`) — needed for a ``script-src`` policy that only
+    allows nonced scripts. A policy allowing the static files' origin
+    (``'self'``) needs none: the package renders no inline script.
 
     ``django.forms.Script`` could build this ``<script>`` natively with a
     ``type="module"`` attribute, but only from Django 5.2 on; this package
@@ -70,37 +73,6 @@ def _module_script(path: str, request: HttpRequest | None) -> Any:
     nonce_attr = f' nonce="{nonce}"' if nonce else ""
     return mark_safe(
         f'<script type="module"{nonce_attr} src="{static(path)}"></script>'
-    )
-
-
-def _import_map_script(imports: dict[str, str], request: HttpRequest | None) -> Any:
-    """Render a ``<script type="importmap">`` mapping bare specifiers (e.g.
-    ``"core"``) to ``imports``' static-relative paths, for use in a
-    ``Media.js`` list.
-
-    Our JS modules import each other by bare specifier (``import {
-    registerPlugin } from "core"``) rather than a relative path
-    (``"./core.js"``): a relative import isn't rewritten by a hashed static
-    storage (e.g. ``ManifestStaticFilesStorage``) the way a template's
-    ``{% static %}`` call is, so it would 404 in production once `core.js`
-    gets renamed to something like `core.3b2f1a.js`. An import map resolves
-    the bare specifier through ``static()`` instead, same as everything else.
-
-    Adds a CSP nonce attribute from ``request.csp_nonce`` when present (see
-    :func:`_csp_nonce`) — an import map is inline content, so a
-    ``script-src`` policy without ``'unsafe-inline'`` requires one.
-
-    Uses the same ``__html__`` escape hatch as :func:`_module_script` (no
-    ``django.forms.widgets.MediaAsset`` dependency, so it doesn't need a
-    Django-version check) — this is JSON we build ourselves from our own
-    static paths, not user input, so embedding it directly is safe.
-    """
-    payload = {"imports": {name: static(path) for name, path in imports.items()}}
-    nonce = _csp_nonce(request)
-    nonce_attr = f' nonce="{nonce}"' if nonce else ""
-    return mark_safe(
-        f'<script type="importmap"{nonce_attr}>'
-        f"{json.dumps(payload, ensure_ascii=False)}</script>"
     )
 
 
@@ -260,16 +232,14 @@ class BaseSelectFilter(SimpleListFilter):
         resolves ``.css``/``.js`` through ``__getitem__`` rather than a real
         attribute — plain attribute access isn't available.
 
-        Each ``<script>`` picks up a CSP nonce from ``request.csp_nonce`` when
-        present — set by Django's own CSP middleware (6.0+) or by the
-        third-party ``django-csp`` package, both of which expose it under
-        that same attribute name; harmless to skip when neither is in use.
+        Each ``<script>`` picks up a CSP nonce when the request has one —
+        from Django's own CSP middleware (6.0+) or the third-party
+        ``django-csp`` package; harmless to skip when neither is in use.
+        All of them are external files: nothing inline for a Content
+        Security Policy to block.
         """
         request = getattr(self, "request", None)
-        js = [
-            _import_map_script({"core": "admin_select_filter/js/core.js"}, request),
-            _module_script("admin_select_filter/js/core.js", request),
-        ]
+        js = [_module_script("admin_select_filter/js/core.js", request)]
         if self.async_call:
             js.append(
                 _module_script("admin_select_filter/js/async_options.js", request)

@@ -495,16 +495,16 @@ class BaseSelectFilterTests(TestCase):
                 css_html,
             )
 
-        with self.subTest("sync, searchable, single: import map + core.js only"):
+        with self.subTest("sync, searchable, single: core.js only"):
             filter_instance = self._build(
                 async_call=False, searchable=True, multiple=False
             )
             js_html = str(filter_instance.media["js"])
-            self.assertIn('type="importmap"', js_html)
-            self.assertIn('"core": "/static/admin_select_filter/js/core.js"', js_html)
-            self.assertIn('type="module"', js_html)
-            self.assertIn('src="/static/admin_select_filter/js/core.js"', js_html)
-            self.assertLess(js_html.index("importmap"), js_html.index('type="module"'))
+            self.assertEqual(
+                js_html,
+                '<script type="module"'
+                ' src="/static/admin_select_filter/js/core.js"></script>',
+            )
             self.assertNotIn("async_options.js", js_html)
             self.assertNotIn("non_searchable.js", js_html)
             self.assertNotIn("multiple_navigation.js", js_html)
@@ -536,7 +536,6 @@ class BaseSelectFilterTests(TestCase):
             )
             js_html = str(filter_instance.media["js"])
             names = [
-                "importmap",
                 "core.js",
                 "async_options.js",
                 "non_searchable.js",
@@ -544,7 +543,10 @@ class BaseSelectFilterTests(TestCase):
             ]
             positions = [js_html.index(name) for name in names]
             self.assertEqual(positions, sorted(positions))
-            self.assertEqual(js_html.count("<script"), 5)
+            self.assertEqual(js_html.count("<script"), 4)
+            # Nothing inline for a Content Security Policy to block.
+            self.assertEqual(js_html.count("<script"), js_html.count(" src="))
+            self.assertNotIn("importmap", js_html)
 
         with self.subTest("no request attribute at all: no CSP nonce, no crash"):
             filter_instance = self._build()
@@ -559,7 +561,14 @@ class BaseSelectFilterTests(TestCase):
             setattr(request, "csp_nonce", "abc123")  # noqa: B010
             filter_instance = self._build(request=request)
             js_html = str(filter_instance.media["js"])
-            self.assertEqual(js_html.count('nonce="abc123"'), 2)
+            self.assertEqual(js_html.count('nonce="abc123"'), 1)
+
+        with self.subTest("Django's own CSP middleware's nonce (6.0+)"):
+            request = RequestFactory().get("/admin/")
+            setattr(request, "_csp_nonce", "def456")  # noqa: B010
+            filter_instance = self._build(request=request, multiple=True)
+            js_html = str(filter_instance.media["js"])
+            self.assertEqual(js_html.count('nonce="def456"'), 2)
 
     def test_choices(self):
         with self.subTest("single selection"):

@@ -14,6 +14,13 @@
 
 - With django-unfold, the search box of a filter couldn't be typed in: its
   dropdown now opens inside Unfold's filter panel, which traps the focus.
+- Under a Content Security Policy without `'unsafe-inline'`, the filters
+  didn't load: their `<script type="importmap">` is gone, so every script
+  they add is an external file, which `script-src 'self'` allows. The
+  capability modules no longer import `core.js` by bare specifier.
+- The CSP nonce of Django's own middleware (6.0+), kept in
+  `request._csp_nonce`, was missed: only django-csp's `request.csp_nonce`
+  was read. The filters' scripts now carry either.
 
 ## [0.1.3] - 2026-10-07
 

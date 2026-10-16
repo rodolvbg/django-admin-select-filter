@@ -9,18 +9,15 @@ function loadScript(source) {
 }
 
 // Capability modules (async_options.js, multiple_navigation.js,
-// non_searchable.js, ...) register themselves here. base.html only loads the
-// modules a given filter's attributes actually need (e.g. async_call,
-// searchable), and since a module script only ever runs once per document
-// regardless of how many <script> tags reference it, registering here is
-// safe even though several filters on the same page may request the same
-// module.
+// non_searchable.js, ...) push themselves onto this list. base.html only
+// loads the modules a given filter's attributes actually need (e.g.
+// async_call, searchable), and since a module script only ever runs once per
+// document regardless of how many <script> tags reference it, several filters
+// on the same page may request the same module. They don't import this file:
+// a bare specifier would need an inline <script type="importmap">, which a
+// Content Security Policy without 'unsafe-inline' (or a nonce) blocks.
 window.__djangoAdminSelectFilterPlugins ??= [];
 const plugins = window.__djangoAdminSelectFilterPlugins;
-
-export function registerPlugin(plugin) {
-	plugins.push(plugin);
-}
 
 // Select2's translation files register themselves on the global `jQuery`,
 // so they load while it points at the jQuery Select2 is attached to.

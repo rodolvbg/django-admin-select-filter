@@ -1,5 +1,3 @@
-import { registerPlugin } from "core";
-
 /**
  * admin_autocomplete: the admin's own endpoint (the one of
  * autocomplete_fields), asked about the filter's relation field. It returns
@@ -36,7 +34,9 @@ function adminAutocomplete(element) {
 }
 
 // Loaded only when a filter has async_call = True (see base.html).
-registerPlugin({
+// Registered with core.js, which reads this list once the page is parsed.
+window.__djangoAdminSelectFilterPlugins ??= [];
+window.__djangoAdminSelectFilterPlugins.push({
 	appliesTo: (element) => element.dataset.asyncCall === "true",
 
 	extendOptions: (element, options) => {
