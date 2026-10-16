@@ -1357,3 +1357,10 @@ class FieldListFilterTests(TestCase):
 
         self.assertEqual(len(matching), 1)
         self.assertEqual(list(matching[0].get_options()), [country])
+
+
+def test_choices_type_alias_is_importable():
+    # Only imported under TYPE_CHECKING by the package itself.
+    from django_admin_select_filter.types import Choices
+
+    assert Choices == list[tuple[str, str]]

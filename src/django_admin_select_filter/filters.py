@@ -16,14 +16,14 @@ from django.utils.functional import cached_property
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext
 
-from django_admin_select_filter.types import Choices
-
 if TYPE_CHECKING:
     from collections.abc import Iterator
     from typing import Any, ClassVar
 
     from django.contrib.admin import ModelAdmin
     from django.http import HttpRequest
+
+    from django_admin_select_filter.types import Choices
 
 # The default ``name`` django_admin_select_filter_path() registers its route
 # under. Imported from there (rather than declared alongside it) so filters

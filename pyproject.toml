@@ -90,11 +90,24 @@ lint.select = [
   "RUF",
   "SIM",
   "T20",
+  # flake8-type-checking
+  "TC",
   "TID",
   "UP",
   "W",
 ]
-lint.ignore = [ "B9", "E203", "E501", "E701", "RUF012", "SIM105" ]
+lint.ignore = [
+  "B9",
+  "E203",
+  "E501",
+  "E701",
+  "RUF012",
+  "SIM105",
+  # runtime-cast-value
+  # Forces quoting the type argument in typing.cast(), even when the type is a
+  # normal runtime import. Purely stylistic, so we ignore it.
+  "TC006",
+]
 lint.flake8-tidy-imports.ban-relative-imports = "all"
 
 [tool.mypy]
