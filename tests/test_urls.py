@@ -1,12 +1,13 @@
 import sys
 import types
 
+from django.test import SimpleTestCase
 from django.urls import reverse
 
 from django_admin_select_filter.urls import django_admin_select_filter_path
 
 
-class TestSelect2FilterUrls:
+class TestSelect2FilterUrls(SimpleTestCase):
     """The options endpoint route."""
 
     def test_default_options_url(self):

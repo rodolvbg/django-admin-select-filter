@@ -1,11 +1,10 @@
 import json
 from unittest.mock import patch
 
-import pytest
 from django.contrib import admin
 from django.contrib.auth.models import AnonymousUser, User
 from django.http import HttpResponse
-from django.test import Client, RequestFactory
+from django.test import Client, RequestFactory, TestCase
 from django.urls import reverse
 from inline_snapshot import snapshot
 from inline_snapshot_django import snapshot_queries
@@ -14,11 +13,18 @@ from django_admin_select_filter.views import Select2FilterOptionsView
 from tests.testapp.admin import AsyncAuthorFilter, AsyncGenreFilter, GenreFilter
 from tests.testapp.models import Author, Book, Country
 
-pytestmark = pytest.mark.django_db
 
-
-class TestSelect2FilterOptionsView:
+class TestSelect2FilterOptionsView(TestCase):
     """The options endpoint, end to end."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_superuser(
+            "admin", "admin@example.com", "password"
+        )
+
+    def setUp(self):
+        self.client.force_login(self.user)
 
     def test_options_requires_all_parameters(self):
         client = Client()
@@ -81,11 +87,11 @@ class TestSelect2FilterOptionsView:
         assert response.status_code == 403
         assert queries == snapshot([])
 
-    def test_options_404_when_no_matching_filter(self, admin_client):
+    def test_options_404_when_no_matching_filter(self):
         url = reverse("admin_select_filter:options")
 
         with snapshot_queries() as queries:
-            response = admin_client.get(
+            response = self.client.get(
                 url,
                 {"app_label": "testapp", "model_name": "author", "parameter_name": "x"},
             )
@@ -98,11 +104,11 @@ class TestSelect2FilterOptionsView:
             ]
         )
 
-    def test_options_404_for_non_async_filter(self, admin_client):
+    def test_options_404_for_non_async_filter(self):
         url = reverse("admin_select_filter:options")
 
         with snapshot_queries() as queries:
-            response = admin_client.get(
+            response = self.client.get(
                 url,
                 {
                     "app_label": "testapp",
@@ -119,13 +125,13 @@ class TestSelect2FilterOptionsView:
             ]
         )
 
-    def test_options_returns_select2_results_for_foreign_key_filter(self, admin_client):
+    def test_options_returns_select2_results_for_foreign_key_filter(self):
         author = Author.objects.create(name="Rowling")
         Book.objects.create(title="Harry Potter", author=author)
         url = reverse("admin_select_filter:options")
 
         with snapshot_queries() as queries:
-            response = admin_client.get(
+            response = self.client.get(
                 url,
                 {
                     "app_label": "testapp",
@@ -150,12 +156,12 @@ class TestSelect2FilterOptionsView:
             ]
         )
 
-    def test_options_returns_select2_results_for_choice_filter(self, admin_client):
+    def test_options_returns_select2_results_for_choice_filter(self):
         Book.objects.create(title="Dune", genre="fiction")
         url = reverse("admin_select_filter:options")
 
         with snapshot_queries() as queries:
-            response = admin_client.get(
+            response = self.client.get(
                 url,
                 {
                     "app_label": "testapp",
@@ -180,9 +186,7 @@ class TestSelect2FilterOptionsView:
             ]
         )
 
-    def test_options_finds_a_model_registered_only_on_a_custom_admin_site(
-        self, admin_client
-    ):
+    def test_options_finds_a_model_registered_only_on_a_custom_admin_site(self):
         """A model registered only on a project's own AdminSite (not on
         django.contrib.admin.site) must still resolve; see ``Country``,
         registered solely on ``e2e_admin_site`` in tests/testapp/admin.py."""
@@ -190,7 +194,7 @@ class TestSelect2FilterOptionsView:
         url = reverse("admin_select_filter:options")
 
         with snapshot_queries() as queries:
-            response = admin_client.get(
+            response = self.client.get(
                 url,
                 {
                     "app_label": "testapp",
@@ -210,11 +214,15 @@ class TestSelect2FilterOptionsView:
         )
 
 
-class TestSelect2FilterOptionsViewMethods:
+class TestSelect2FilterOptionsViewMethods(TestCase):
     """Unit tests for the view's non-``get`` methods, called directly."""
 
-    def setup_method(self):
+    def setUp(self):
         self.view = Select2FilterOptionsView()
+        Select2FilterOptionsView._build_async_filter_registry.cache_clear()
+        self.addCleanup(
+            Select2FilterOptionsView._build_async_filter_registry.cache_clear
+        )
 
     def test__get_filter_class_matches_a_plain_filter_class_entry(self):
         request = RequestFactory().get("/admin/")
@@ -308,12 +316,6 @@ class TestSelect2FilterOptionsViewMethods:
             found = self.view._find_admin_site(Book, request, "author")
         assert found is None
 
-    @pytest.fixture
-    def clear_registry_cache(self):
-        Select2FilterOptionsView._build_async_filter_registry.cache_clear()
-        yield
-        Select2FilterOptionsView._build_async_filter_registry.cache_clear()
-
     def _via_registry(self, sites):
         request = RequestFactory().get("/admin/")
         request.user = User.objects.create_superuser(
@@ -323,9 +325,7 @@ class TestSelect2FilterOptionsViewMethods:
             Select2FilterOptionsView._build_async_filter_registry.cache_clear()
             return self.view._find_admin_site_via_registry(Book, request, "author")
 
-    def test__find_admin_site_via_registry_skips_a_site_without_permission(
-        self, clear_registry_cache
-    ):
+    def test__find_admin_site_via_registry_skips_a_site_without_permission(self):
         class _DenyingModelAdmin(admin.ModelAdmin[Book]):
             def has_view_permission(self, request, obj=None):
                 return False
@@ -338,7 +338,7 @@ class TestSelect2FilterOptionsViewMethods:
         assert found is admin.site
 
     def test__find_admin_site_via_registry_tries_next_site_without_a_registry_match(
-        self, clear_registry_cache
+        self,
     ):
         class _EmptyListFilterModelAdmin(admin.ModelAdmin[Book]):
             list_filter = ()
@@ -350,9 +350,7 @@ class TestSelect2FilterOptionsViewMethods:
 
         assert found is admin.site
 
-    def test__find_admin_site_via_registry_returns_none_when_no_site_matches(
-        self, clear_registry_cache
-    ):
+    def test__find_admin_site_via_registry_returns_none_when_no_site_matches(self):
         found = self._via_registry([])
 
         assert found is None

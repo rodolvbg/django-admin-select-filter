@@ -7,8 +7,9 @@ from django.contrib import admin
 from django.contrib.admin.filters import SimpleListFilter
 from django.contrib.auth.models import User
 from django.template.loader import render_to_string
-from django.test import RequestFactory
+from django.test import RequestFactory, SimpleTestCase, TestCase
 from django.urls import reverse
+from unittest_parametrize import ParametrizedTestCase, parametrize
 
 from django_admin_select_filter.filters import (
     BaseSelectFilter,
@@ -41,8 +42,6 @@ from tests.testapp.admin import (
 )
 from tests.testapp.models import Author, Book, Country
 
-pytestmark = pytest.mark.django_db
-
 
 def _changelist_params(params):
     """Adapt a ``{name: [value, ...]}`` params dict — the shape every
@@ -65,8 +64,7 @@ def _changelist_params(params):
     }
 
 
-@pytest.fixture(autouse=True)
-def _adapt_filter_params_to_django_version(monkeypatch):
+def _adapt_filter_params_to_django_version():
     """Every filter construction in this file passes ``params`` shaped
     for Django 5.0+ (a list of raw values per key). Real Django < 5.0
     builds a single scalar per key instead — the filter classes under
@@ -76,14 +74,14 @@ def _adapt_filter_params_to_django_version(monkeypatch):
     one shared choke point (rather than every one of this file's ~20
     call sites) adapts every filter construction transparently, so
     tests don't silently return empty querysets on Django < 5.0 instead
-    of exercising the real behavior.
+    of exercising the real behavior. Returns the started patcher.
     """
     original_init = SimpleListFilter.__init__
 
     def patched_init(self, request, params, model, model_admin):
         original_init(self, request, _changelist_params(params), model, model_admin)
 
-    monkeypatch.setattr(SimpleListFilter, "__init__", patched_init)
+    return patch.object(SimpleListFilter, "__init__", patched_init)
 
 
 class _FakeChangeList:
@@ -103,8 +101,13 @@ class _FakeModelAdmin:
         return self.queryset
 
 
-class TestBaseSelectFilter:
+class TestBaseSelectFilter(ParametrizedTestCase, TestCase):
     """The shared base: configuration, options, queryset and media."""
+
+    def setUp(self):
+        patcher = _adapt_filter_params_to_django_version()
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def _build(self, **attrs):
         filter_instance = BaseSelectFilter.__new__(BaseSelectFilter)
@@ -159,7 +162,7 @@ class TestBaseSelectFilter:
         assert first is second
         assert model_admin.calls == 1
 
-    @pytest.mark.parametrize(
+    @parametrize(
         ("parameter_name", "expected"),
         [
             ("author", True),
@@ -168,10 +171,10 @@ class TestBaseSelectFilter:
             ("does_not_exist", False),
         ],
         ids=[
-            "nullable field matched by name",
-            "non-nullable field matched by name",
-            "nullable field matched by attname",
-            "field that doesn't exist",
+            "nullable_field_matched_by_name",
+            "non_nullable_field_matched_by_name",
+            "nullable_field_matched_by_attname",
+            "field_that_doesn_t_exist",
         ],
     )
     def test__is_nullable(self, parameter_name, expected):
@@ -253,7 +256,7 @@ class TestBaseSelectFilter:
         )
         assert not filter_instance._has_null_option()
 
-    @pytest.mark.parametrize(
+    @parametrize(
         ("parameter_name", "expected_name"),
         [
             (None, None),
@@ -265,13 +268,13 @@ class TestBaseSelectFilter:
             ("author__does_not_exist", None),
         ],
         ids=[
-            "no parameter_name",
-            "single segment, valid field",
-            "single segment, unknown field",
-            "nested, valid relation chain",
-            "nested, unknown middle segment",
-            "nested, non-relation middle segment",
-            "nested, unknown final segment",
+            "no_parameter_name",
+            "single_segment_valid_field",
+            "single_segment_unknown_field",
+            "nested_valid_relation_chain",
+            "nested_unknown_middle_segment",
+            "nested_non_relation_middle_segment",
+            "nested_unknown_final_segment",
         ],
     )
     def test__resolve_field(self, parameter_name, expected_name):
@@ -732,14 +735,19 @@ class TestBaseSelectFilter:
         assert result == [("1", "One"), (filter_instance.null_value, "-")]
 
 
-class TestForeignKeyFilter:
+class TestForeignKeyFilter(ParametrizedTestCase, TestCase):
     """The foreign-key flavour: model inference, options and rendering."""
+
+    def setUp(self):
+        patcher = _adapt_filter_params_to_django_version()
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def _build_filter(self, request, params=None):
         model_admin = admin.site._registry[Book]
         return AuthorFilter(request, params or {}, Book, model_admin)
 
-    @pytest.mark.parametrize(
+    @parametrize(
         ("parameter_name", "expected"),
         [
             (None, None),
@@ -749,11 +757,11 @@ class TestForeignKeyFilter:
             ("title", None),
         ],
         ids=[
-            "no parameter_name",
-            "unknown field",
-            "plain relation field",
-            "nested relation chain",
-            "final segment isn't a relation",
+            "no_parameter_name",
+            "unknown_field",
+            "plain_relation_field",
+            "nested_relation_chain",
+            "final_segment_isn_t_a_relation",
         ],
     )
     def test__resolve_model(self, parameter_name, expected):
@@ -1099,8 +1107,13 @@ class TestForeignKeyFilter:
         assert filter_instance.has_output() is False
 
 
-class TestChoiceFilter:
+class TestChoiceFilter(ParametrizedTestCase, TestCase):
     """The choices flavour: options from field choices or explicit ones."""
+
+    def setUp(self):
+        patcher = _adapt_filter_params_to_django_version()
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def _build_filter(self, filter_class, request, params=None):
         model_admin = admin.site._registry[Book]
@@ -1327,8 +1340,13 @@ class TestChoiceFilter:
         assert set(result.values_list("title", flat=True)) == {"Dune", "Cosmos"}
 
 
-class TestFieldListFilter:
+class TestFieldListFilter(ParametrizedTestCase, TestCase):
     """The field_list_filter factory for the (field, filter) tuple form."""
+
+    def setUp(self):
+        patcher = _adapt_filter_params_to_django_version()
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     """Tests for the ``list_filter = [("field", field_list_filter(...))]`` form."""
 
@@ -1454,8 +1472,11 @@ class TestFieldListFilter:
         assert list(matching[0].get_options()) == [country]
 
 
-def test_choices_type_alias_is_importable():
-    # Only imported under TYPE_CHECKING by the package itself.
-    from django_admin_select_filter.types import Choices
+class TestChoicesTypeAlias(SimpleTestCase):
+    """The ``Choices`` alias of ``django_admin_select_filter.types``."""
 
-    assert Choices == list[tuple[str, str]]
+    def test_choices_type_alias_is_importable(self):
+        # Only imported under TYPE_CHECKING by the package itself.
+        from django_admin_select_filter.types import Choices
+
+        assert Choices == list[tuple[str, str]]

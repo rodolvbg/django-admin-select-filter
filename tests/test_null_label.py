@@ -1,10 +1,11 @@
 """``null_label`` / ``get_null_label()``: the empty-value option's text."""
 
-import pytest
+from unittest.mock import patch
+
 from django.contrib import admin
 from django.contrib.auth.models import AnonymousUser
 from django.template.loader import render_to_string
-from django.test import RequestFactory
+from django.test import RequestFactory, TestCase
 from django.utils.translation import gettext_lazy
 
 from django_admin_select_filter.filters import BaseSelectFilter, ForeignKeyFilter
@@ -25,23 +26,21 @@ def null_option(filter_class, site=admin.site, request=None):
     return dict(options).get(filter_instance.null_value)
 
 
-class TestNullLabel:
+class TestNullLabel(TestCase):
     """The empty-value option's text."""
 
-    @pytest.mark.django_db
-    def test_default_is_the_admin_empty_value_display(self, monkeypatch):
+    def test_default_is_the_admin_empty_value_display(self):
         Author.objects.create(name="Rowling")
         assert null_option(AuthorFilter) == "-"
 
-        monkeypatch.setattr(
+        with patch.object(
             type(admin.site._registry[Book]),
             "empty_value_display",
             "(none)",
-            raising=False,
-        )
-        assert null_option(AuthorFilter) == "(none)"
+            create=True,
+        ):
+            assert null_option(AuthorFilter) == "(none)"
 
-    @pytest.mark.django_db
     def test_null_label_and_get_null_label(self):
         class Labelled(AuthorFilter):
             null_label = gettext_lazy("No author")
@@ -61,7 +60,6 @@ class TestNullLabel:
         assert filter_instance.get_null_label(None) == "-"
         assert filter_instance.null_label_display == "-"
 
-    @pytest.mark.django_db
     def test_async_options_and_the_admin_autocomplete_use_it(self):
         class Labelled(AuthorAutocompleteFilter):
             null_label = "No author"

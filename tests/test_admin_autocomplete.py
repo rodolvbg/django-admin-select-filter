@@ -1,10 +1,14 @@
 """``ForeignKeyFilter.admin_autocomplete``: options from ``admin:autocomplete``."""
 
+from contextlib import contextmanager
+from unittest.mock import patch
+
 import pytest
 from django.contrib import admin
+from django.contrib.auth.models import User
 from django.core.exceptions import ImproperlyConfigured
 from django.template.loader import render_to_string
-from django.test import RequestFactory
+from django.test import RequestFactory, TestCase
 from django.urls import reverse
 
 from django_admin_select_filter.filters import ChoiceFilter, ForeignKeyFilter
@@ -35,19 +39,27 @@ def build(filter_class, site=admin.site, params=None, user=None):
     return filter_class(request, dict(params or {}), Book, model_admin)
 
 
-@pytest.fixture
-def country_site(monkeypatch):
+@contextmanager
+def country_site():
     # A routed site, whose Country admin gets search_fields for the test.
     from tests.testapp.admin import E2ECountryAdmin, e2e_admin_site
 
-    monkeypatch.setattr(E2ECountryAdmin, "search_fields", ["name"])
-    return e2e_admin_site
+    with patch.object(E2ECountryAdmin, "search_fields", ["name"]):
+        yield e2e_admin_site
 
 
-class TestAdminAutocomplete:
+class TestAdminAutocomplete(TestCase):
     """A filter backed by the admin's own autocomplete endpoint."""
 
-    @pytest.mark.django_db
+    @classmethod
+    def setUpTestData(cls):
+        cls.user = User.objects.create_superuser(
+            "admin", "admin@example.com", "password"
+        )
+
+    def setUp(self):
+        self.client.force_login(self.user)
+
     def test_uses_the_admin_autocomplete_endpoint(self):
         filter_instance = build(AuthorAutocompleteFilter)
 
@@ -62,9 +74,9 @@ class TestAdminAutocomplete:
             filter_instance.media["js"]
         )
 
-    @pytest.mark.django_db
-    def test_nested_lookups_ask_about_the_last_relation(self, country_site):
-        filter_instance = build(CountryAutocompleteFilter, site=country_site)
+    def test_nested_lookups_ask_about_the_last_relation(self):
+        with country_site() as site:
+            filter_instance = build(CountryAutocompleteFilter, site=site)
 
         assert filter_instance.async_call_url == reverse("e2e_admin:autocomplete")
         assert filter_instance.autocomplete_source == {
@@ -73,7 +85,6 @@ class TestAdminAutocomplete:
             "field_name": "country",
         }
 
-    @pytest.mark.django_db
     def test_template_tells_the_js_where_to_ask(self):
         author = Author.objects.create(name="Rowling")
         filter_instance = build(
@@ -97,35 +108,32 @@ class TestAdminAutocomplete:
         assert 'data-null-value="__null__"' in html  # Book.author is nullable
         assert "Rowling" in html  # the selected option is rendered
 
-    @pytest.mark.django_db
     def test_a_non_relation_field_is_rejected(self):
         class GenreAutocompleteFilter(ForeignKeyFilter):
             parameter_name = "genre"
             model = Author  # not a relation, whatever the model
             admin_autocomplete = True
 
-        with pytest.raises(
-            ImproperlyConfigured, match="ForeignKey or a ManyToManyField"
+        with self.assertRaisesRegex(
+            ImproperlyConfigured, "ForeignKey or a ManyToManyField"
         ):
             build(GenreAutocompleteFilter)
 
-    @pytest.mark.django_db
     def test_a_related_model_without_search_fields_is_rejected(self):
         # Country has no ModelAdmin with search_fields on the default site.
-        with pytest.raises(ImproperlyConfigured, match="search_fields for Country"):
+        with self.assertRaisesRegex(ImproperlyConfigured, "search_fields for Country"):
             build(CountryAutocompleteFilter)
 
     def test_choice_filters_have_no_admin_autocomplete(self):
         assert not hasattr(ChoiceFilter, "admin_autocomplete")
 
-    @pytest.mark.django_db
     @pytest.mark.filterwarnings(
         "ignore::django.core.paginator.UnorderedObjectListWarning"
     )
-    def test_the_endpoint_answers_for_the_filter(self, admin_client):
+    def test_the_endpoint_answers_for_the_filter(self):
         Author.objects.create(name="Rowling")
         Author.objects.create(name="Tolkien")
-        response = admin_client.get(
+        response = self.client.get(
             reverse("admin:autocomplete"),
             {
                 "term": "row",
@@ -138,7 +146,6 @@ class TestAdminAutocomplete:
         assert response.status_code == 200
         assert [item["text"] for item in response.json()["results"]] == ["Rowling"]
 
-    @pytest.mark.django_db
     def test_selected_values_filter_the_changelist(self):
         rowling = Author.objects.create(name="Rowling")
         Book.objects.create(title="HP", author=rowling)
