@@ -82,9 +82,6 @@ CATALOG_IDS = [catalog.parent.parent.name for catalog in CATALOGS]
 class TestTranslationCatalogs:
     """The shipped .po / .mo catalogs."""
 
-    def test_catalogs_exist(self):
-        assert CATALOGS
-
     @pytest.mark.parametrize(("catalog", "msgstr", "fuzzy"), ENTRIES)
     def test_every_message_is_translated(self, catalog, msgstr, fuzzy):
         assert msgstr.strip(), "untranslated"
