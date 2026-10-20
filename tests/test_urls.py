@@ -6,7 +6,9 @@ from django.urls import reverse
 from django_admin_select_filter.urls import django_admin_select_filter_path
 
 
-class Select2FilterUrlsTests:
+class TestSelect2FilterUrls:
+    """The options endpoint route."""
+
     def test_default_options_url(self):
         assert (
             reverse("admin_select_filter:options")

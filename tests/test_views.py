@@ -5,7 +5,7 @@ import pytest
 from django.contrib import admin
 from django.contrib.auth.models import AnonymousUser, User
 from django.http import HttpResponse
-from django.test import Client, RequestFactory, TestCase
+from django.test import Client, RequestFactory
 from django.urls import reverse
 from inline_snapshot import snapshot
 from inline_snapshot_django import snapshot_queries
@@ -17,7 +17,9 @@ from tests.testapp.models import Author, Book, Country
 pytestmark = pytest.mark.django_db
 
 
-class Select2FilterOptionsViewTests:
+class TestSelect2FilterOptionsView:
+    """The options endpoint, end to end."""
+
     def test_options_requires_all_parameters(self):
         client = Client()
         url = reverse("admin_select_filter:options")
@@ -208,66 +210,74 @@ class Select2FilterOptionsViewTests:
         )
 
 
-class Select2FilterOptionsViewMethodTests(TestCase):
+class TestSelect2FilterOptionsViewMethods:
     """Unit tests for the view's non-``get`` methods, called directly."""
 
-    def setUp(self):
+    def setup_method(self):
         self.view = Select2FilterOptionsView()
 
-    def test__get_filter_class(self):
+    def test__get_filter_class_matches_a_plain_filter_class_entry(self):
         request = RequestFactory().get("/admin/")
         model_admin = admin.site._registry[Book]
 
-        with self.subTest("matches a plain filter class entry"):
-            self.assertIs(
-                self.view._get_filter_class(model_admin, request, "author"),
-                AsyncAuthorFilter,
-            )
+        assert (
+            self.view._get_filter_class(model_admin, request, "author")
+            is AsyncAuthorFilter
+        )
 
-        with self.subTest("matches a (field, filter) tuple entry"):
-
-            class _TupleFilterAdmin(admin.ModelAdmin[Book]):
-                # Not a real FieldListFilter tuple (Django's stub rejects a
-                # bare BaseSelectFilter subclass here) — only exercises
-                # _get_filter_class()'s own tuple-unpacking, never Django's
-                # actual FieldListFilter calling convention.
-                list_filter = [("author", AsyncAuthorFilter)]  # type: ignore[list-item]
-
-            tuple_admin = _TupleFilterAdmin(Book, admin.site)
-            self.assertIs(
-                self.view._get_filter_class(tuple_admin, request, "author"),
-                AsyncAuthorFilter,
-            )
-
-        with self.subTest("ignores a non-async filter with a matching name"):
-            self.assertIsNone(
-                self.view._get_filter_class(model_admin, request, "not_a_real_field")
-            )
-
-        with self.subTest("returns None when nothing matches parameter_name"):
-            self.assertIsNone(
-                self.view._get_filter_class(model_admin, request, "unknown")
-            )
-
-    def test__has_view_permission(self):
+    def test__get_filter_class_matches_a_field_filter_tuple_entry(self):
         request = RequestFactory().get("/admin/")
 
-        with self.subTest("model not registered on this site"):
-            self.assertFalse(
-                self.view._has_view_permission(admin.site, Country, request)
-            )
+        class _TupleFilterAdmin(admin.ModelAdmin[Book]):
+            # Not a real FieldListFilter tuple (Django's stub rejects a
+            # bare BaseSelectFilter subclass here) — only exercises
+            # _get_filter_class()'s own tuple-unpacking, never Django's
+            # actual FieldListFilter calling convention.
+            list_filter = [("author", AsyncAuthorFilter)]  # type: ignore[list-item]
 
-        with self.subTest("registered but permission denied"):
-            request.user = AnonymousUser()
-            self.assertFalse(self.view._has_view_permission(admin.site, Book, request))
+        tuple_admin = _TupleFilterAdmin(Book, admin.site)
+        assert (
+            self.view._get_filter_class(tuple_admin, request, "author")
+            is AsyncAuthorFilter
+        )
 
-        with self.subTest("registered and permitted"):
-            request.user = User.objects.create_superuser(
-                "admin2", "admin2@example.com", "password"
-            )
-            self.assertTrue(self.view._has_view_permission(admin.site, Book, request))
+    def test__get_filter_class_ignores_a_non_async_filter_with_a_matching_name(self):
+        request = RequestFactory().get("/admin/")
+        model_admin = admin.site._registry[Book]
 
-    def test__find_admin_site(self):
+        assert (
+            self.view._get_filter_class(model_admin, request, "not_a_real_field")
+            is None
+        )
+
+    def test__get_filter_class_returns_none_when_nothing_matches_parameter_name(self):
+        request = RequestFactory().get("/admin/")
+        model_admin = admin.site._registry[Book]
+
+        assert self.view._get_filter_class(model_admin, request, "unknown") is None
+
+    def test__has_view_permission_model_not_registered_on_this_site(self):
+        request = RequestFactory().get("/admin/")
+
+        assert not self.view._has_view_permission(admin.site, Country, request)
+
+    def test__has_view_permission_registered_but_permission_denied(self):
+        request = RequestFactory().get("/admin/")
+
+        request.user = AnonymousUser()
+        assert not self.view._has_view_permission(admin.site, Book, request)
+
+    def test__has_view_permission_registered_and_permitted(self):
+        request = RequestFactory().get("/admin/")
+
+        request.user = User.objects.create_superuser(
+            "admin2", "admin2@example.com", "password"
+        )
+        assert self.view._has_view_permission(admin.site, Book, request)
+
+    def test__find_admin_site_skips_a_site_without_permission_returns_the_next_match(
+        self,
+    ):
         request = RequestFactory().get("/admin/")
         request.user = User.objects.create_superuser(
             "admin3", "admin3@example.com", "password"
@@ -281,26 +291,41 @@ class Select2FilterOptionsViewMethodTests(TestCase):
         class _DenyingSite:
             _registry = {Book: _DenyingModelAdmin(Book, admin.site)}
 
-        with self.subTest("skips a site without permission, returns the next match"):
-            with patch(
-                "django_admin_select_filter.views.all_sites",
-                [_DenyingSite(), permitted_site],
-            ):
-                found = self.view._find_admin_site(Book, request, "author")
-            self.assertIs(found, permitted_site)
+        with patch(
+            "django_admin_select_filter.views.all_sites",
+            [_DenyingSite(), permitted_site],
+        ):
+            found = self.view._find_admin_site(Book, request, "author")
+        assert found is permitted_site
 
-        with self.subTest("returns None when no site has a matching filter"):
-            with patch("django_admin_select_filter.views.all_sites", []):
-                found = self.view._find_admin_site(Book, request, "author")
-            self.assertIsNone(found)
+    def test__find_admin_site_returns_none_when_no_site_has_a_matching_filter(self):
+        request = RequestFactory().get("/admin/")
+        request.user = User.objects.create_superuser(
+            "admin3", "admin3@example.com", "password"
+        )
 
-    def test__find_admin_site_via_registry(self):
+        with patch("django_admin_select_filter.views.all_sites", []):
+            found = self.view._find_admin_site(Book, request, "author")
+        assert found is None
+
+    @pytest.fixture
+    def clear_registry_cache(self):
+        Select2FilterOptionsView._build_async_filter_registry.cache_clear()
+        yield
+        Select2FilterOptionsView._build_async_filter_registry.cache_clear()
+
+    def _via_registry(self, sites):
         request = RequestFactory().get("/admin/")
         request.user = User.objects.create_superuser(
             "admin4", "admin4@example.com", "password"
         )
-        permitted_site = admin.site
+        with patch("django_admin_select_filter.views.all_sites", sites):
+            Select2FilterOptionsView._build_async_filter_registry.cache_clear()
+            return self.view._find_admin_site_via_registry(Book, request, "author")
 
+    def test__find_admin_site_via_registry_skips_a_site_without_permission(
+        self, clear_registry_cache
+    ):
         class _DenyingModelAdmin(admin.ModelAdmin[Book]):
             def has_view_permission(self, request, obj=None):
                 return False
@@ -308,66 +333,61 @@ class Select2FilterOptionsViewMethodTests(TestCase):
         class _DenyingSite:
             _registry = {Book: _DenyingModelAdmin(Book, admin.site)}
 
+        found = self._via_registry([_DenyingSite(), admin.site])
+
+        assert found is admin.site
+
+    def test__find_admin_site_via_registry_tries_next_site_without_a_registry_match(
+        self, clear_registry_cache
+    ):
         class _EmptyListFilterModelAdmin(admin.ModelAdmin[Book]):
             list_filter = ()
 
         class _PermittedNoMatchSite:
             _registry = {Book: _EmptyListFilterModelAdmin(Book, admin.site)}
 
-        Select2FilterOptionsView._build_async_filter_registry.cache_clear()
-        try:
-            with self.subTest(
-                "skips a site without permission, returns the next match"
-            ):
-                with patch(
-                    "django_admin_select_filter.views.all_sites",
-                    [_DenyingSite(), permitted_site],
-                ):
-                    Select2FilterOptionsView._build_async_filter_registry.cache_clear()
-                    found = self.view._find_admin_site_via_registry(
-                        Book, request, "author"
-                    )
-                self.assertIs(found, permitted_site)
+        found = self._via_registry([_PermittedNoMatchSite(), admin.site])
 
-            with self.subTest(
-                "permitted site without a registry match, tries the next site"
-            ):
-                with patch(
-                    "django_admin_select_filter.views.all_sites",
-                    [_PermittedNoMatchSite(), permitted_site],
-                ):
-                    Select2FilterOptionsView._build_async_filter_registry.cache_clear()
-                    found = self.view._find_admin_site_via_registry(
-                        Book, request, "author"
-                    )
-                self.assertIs(found, permitted_site)
+        assert found is admin.site
 
-            with self.subTest("returns None when no site has a matching filter"):
-                with patch("django_admin_select_filter.views.all_sites", []):
-                    Select2FilterOptionsView._build_async_filter_registry.cache_clear()
-                    found = self.view._find_admin_site_via_registry(
-                        Book, request, "author"
-                    )
-                self.assertIsNone(found)
-        finally:
-            Select2FilterOptionsView._build_async_filter_registry.cache_clear()
+    def test__find_admin_site_via_registry_returns_none_when_no_site_matches(
+        self, clear_registry_cache
+    ):
+        found = self._via_registry([])
 
-    def test_build_async_filter_registry(self):
+        assert found is None
+
+    def test_build_async_filter_registry_includes_an_async_foreign_key_filter(self):
         Select2FilterOptionsView._build_async_filter_registry.cache_clear()
         try:
             registry = Select2FilterOptionsView._build_async_filter_registry()
         finally:
             Select2FilterOptionsView._build_async_filter_registry.cache_clear()
-
         book_map = registry[admin.site]["testapp"]["book"]
-        with self.subTest("includes an async foreign-key filter"):
-            self.assertIs(book_map["author"], AsyncAuthorFilter)
 
-        with self.subTest("includes an async choice filter"):
-            self.assertIs(book_map["genre"], AsyncGenreFilter)
+        assert book_map["author"] is AsyncAuthorFilter
 
-        with self.subTest("excludes sync filters sharing the same parameter_name"):
-            self.assertIsNot(book_map["genre"], GenreFilter)
+    def test_build_async_filter_registry_includes_an_async_choice_filter(self):
+        Select2FilterOptionsView._build_async_filter_registry.cache_clear()
+        try:
+            registry = Select2FilterOptionsView._build_async_filter_registry()
+        finally:
+            Select2FilterOptionsView._build_async_filter_registry.cache_clear()
+        book_map = registry[admin.site]["testapp"]["book"]
+
+        assert book_map["genre"] is AsyncGenreFilter
+
+    def test_build_async_filter_registry_excludes_sync_filters_sharing_the_same_parameter_name(
+        self,
+    ):
+        Select2FilterOptionsView._build_async_filter_registry.cache_clear()
+        try:
+            registry = Select2FilterOptionsView._build_async_filter_registry()
+        finally:
+            Select2FilterOptionsView._build_async_filter_registry.cache_clear()
+        book_map = registry[admin.site]["testapp"]["book"]
+
+        assert book_map["genre"] is not GenreFilter
 
     def test_get_with_use_registry(self):
         author = Author.objects.create(name="Rowling")
@@ -391,7 +411,7 @@ class Select2FilterOptionsViewMethodTests(TestCase):
         finally:
             Select2FilterOptionsView._build_async_filter_registry.cache_clear()
 
-        self.assertEqual(response.status_code, 200)
+        assert response.status_code == 200
         assert isinstance(response, HttpResponse)
         results = json.loads(response.content)["results"]
-        self.assertIn({"id": str(author.pk), "text": "Rowling"}, results)
+        assert {"id": str(author.pk), "text": "Rowling"} in results

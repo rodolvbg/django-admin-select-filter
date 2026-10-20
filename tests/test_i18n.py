@@ -5,8 +5,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
+import pytest
 from django.contrib.auth.models import User
-from django.test import TestCase
 from django.urls import reverse
 from django.utils import translation
 
@@ -70,62 +70,74 @@ def mo_messages(path):
     return {key: value for key, value in catalog.items() if key != ""}
 
 
-class TranslationCatalogTests(TestCase):
-    def test_every_message_is_translated(self):
-        catalogs = list(LOCALE_DIR.glob("*/LC_MESSAGES/django.po"))
-        self.assertTrue(catalogs)
-        for catalog in catalogs:
-            for msgid, msgstr, fuzzy in po_entries(catalog):
-                with self.subTest(catalog=catalog.parent.parent.name, msgid=msgid):
-                    self.assertTrue(msgstr.strip(), "untranslated")
-                    self.assertFalse(fuzzy, "fuzzy")
+CATALOGS = sorted(LOCALE_DIR.glob("*/LC_MESSAGES/django.po"))
+ENTRIES = [
+    pytest.param(catalog, msgstr, fuzzy, id=f"{catalog.parent.parent.name}-{msgid}")
+    for catalog in CATALOGS
+    for msgid, msgstr, fuzzy in po_entries(catalog)
+]
+CATALOG_IDS = [catalog.parent.parent.name for catalog in CATALOGS]
 
-    def test_compiled_catalogs_are_shipped(self):
+
+class TestTranslationCatalogs:
+    """The shipped .po / .mo catalogs."""
+
+    def test_catalogs_exist(self):
+        assert CATALOGS
+
+    @pytest.mark.parametrize(("catalog", "msgstr", "fuzzy"), ENTRIES)
+    def test_every_message_is_translated(self, catalog, msgstr, fuzzy):
+        assert msgstr.strip(), "untranslated"
+        assert not fuzzy, "fuzzy"
+
+    @pytest.mark.parametrize("catalog", CATALOGS, ids=CATALOG_IDS)
+    def test_compiled_catalogs_are_shipped(self, catalog):
         """The shipped .mo has exactly the .po's translations (not compared by
         date: a git checkout gives both files arbitrary modification times)."""
-        for catalog in LOCALE_DIR.glob("*/LC_MESSAGES/django.po"):
-            with self.subTest(catalog=str(catalog)):
-                mo = catalog.with_suffix(".mo")
-                self.assertTrue(mo.exists())
-                self.assertEqual(mo_messages(mo), po_messages(catalog))
+        mo = catalog.with_suffix(".mo")
+        assert mo.exists()
+        assert mo_messages(mo) == po_messages(catalog)
 
 
-class SpanishChangelistTests(TestCase):
-    user: User
+@pytest.mark.django_db
+class TestSpanishChangelist:
+    """The changelist filter texts rendered in other languages."""
 
-    @classmethod
-    def setUpTestData(cls):
-        cls.user = User.objects.create_superuser("admin", "a@example.com", "x")
+    @pytest.fixture(autouse=True)
+    def _data(self, client):
+        user = User.objects.create_superuser("admin", "a@example.com", "x")
         Book.objects.create(title="HP", author=Author.objects.create(name="Rowling"))
+        client.force_login(user)
 
-    def get(self, language):
-        self.client.force_login(self.user)
+    def get(self, client, language):
         with translation.override(language):
-            return self.client.get(reverse("admin:testapp_book_changelist"))
+            return client.get(reverse("admin:testapp_book_changelist"))
 
-    def test_filter_texts_follow_the_language(self):
-        html = self.get("es").content.decode()
+    def test_filter_texts_follow_the_language(self, client):
+        html = self.get(client, "es").content.decode()
 
-        self.assertIn('data-placeholder="Buscar"', html)
-        self.assertIn(">Todo<", re.sub(r">\s+", ">", re.sub(r"\s+<", "<", html)))
+        assert 'data-placeholder="Buscar"' in html
+        assert ">Todo<" in re.sub(r">\s+", ">", re.sub(r"\s+<", "<", html))
 
-    def test_select2_gets_its_translation_file(self):
-        html = self.get("es").content.decode()
+    def test_select2_gets_its_translation_file(self, client):
+        html = self.get(client, "es").content.decode()
 
-        self.assertIn('data-language="es"', html)
-        self.assertIn(
-            'data-select2-i18n-url="/static/admin/js/vendor/select2/i18n/es.js"', html
+        assert 'data-language="es"' in html
+        assert (
+            'data-select2-i18n-url="/static/admin/js/vendor/select2/i18n/es.js"' in html
         )
 
-    def test_regional_variant_falls_back_to_the_language(self):
-        html = self.get("es-ar").content.decode()
+    def test_regional_variant_falls_back_to_the_language(self, client):
+        html = self.get(client, "es-ar").content.decode()
 
-        self.assertIn('data-language="es"', html)
+        assert 'data-language="es"' in html
 
-    def test_language_without_select2_translation(self):
-        html = self.get("en").content.decode()
+    def test_language_without_select2_translation(self, client):
+        html = self.get(client, "en").content.decode()
 
-        self.assertIn('data-language="en"', html)
+        assert 'data-language="en"' in html
+
+    def test_unknown_language_has_no_select2_translation(self):
         select2_language = cast(property, BaseSelectFilter.select2_language)
         select2_i18n_url = cast(property, BaseSelectFilter.select2_i18n_url)
         assert select2_language.fget and select2_i18n_url.fget
@@ -133,5 +145,5 @@ class SpanishChangelistTests(TestCase):
             language = select2_language.fget(None)
             spec = SimpleNamespace(select2_language=language)
 
-            self.assertIsNone(language)
-            self.assertIsNone(select2_i18n_url.fget(spec))
+            assert language is None
+            assert select2_i18n_url.fget(spec) is None

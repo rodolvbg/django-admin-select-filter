@@ -135,7 +135,7 @@ django_settings_module = "tests.settings"
 [tool.pytest]
 ini_options.pythonpath = [ "src", "." ]
 ini_options.python_files = [ "*_tests.py", "test_*.py", "tests.py" ]
-ini_options.python_classes = [ "*Tests" ]
+ini_options.python_classes = [ "Test*" ]
 ini_options.addopts = "--reuse-db --cov=django_admin_select_filter --cov-report=term-missing"
 ini_options.DJANGO_SETTINGS_MODULE = "tests.settings"
 

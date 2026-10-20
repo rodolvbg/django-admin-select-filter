@@ -25,57 +25,60 @@ def null_option(filter_class, site=admin.site, request=None):
     return dict(options).get(filter_instance.null_value)
 
 
-@pytest.mark.django_db
-def test_default_is_the_admin_empty_value_display(monkeypatch):
-    Author.objects.create(name="Rowling")
-    assert null_option(AuthorFilter) == "-"
+class TestNullLabel:
+    """The empty-value option's text."""
 
-    monkeypatch.setattr(
-        type(admin.site._registry[Book]), "empty_value_display", "(none)", raising=False
-    )
-    assert null_option(AuthorFilter) == "(none)"
+    @pytest.mark.django_db
+    def test_default_is_the_admin_empty_value_display(self, monkeypatch):
+        Author.objects.create(name="Rowling")
+        assert null_option(AuthorFilter) == "-"
 
+        monkeypatch.setattr(
+            type(admin.site._registry[Book]),
+            "empty_value_display",
+            "(none)",
+            raising=False,
+        )
+        assert null_option(AuthorFilter) == "(none)"
 
-@pytest.mark.django_db
-def test_null_label_and_get_null_label():
-    class Labelled(AuthorFilter):
-        null_label = gettext_lazy("No author")
+    @pytest.mark.django_db
+    def test_null_label_and_get_null_label(self):
+        class Labelled(AuthorFilter):
+            null_label = gettext_lazy("No author")
 
-    class PerRequest(AuthorFilter):
-        def get_null_label(self, request):
-            return "Anonymous" if request.GET.get("anon") else "Nobody"
+        class PerRequest(AuthorFilter):
+            def get_null_label(self, request):
+                return "Anonymous" if request.GET.get("anon") else "Nobody"
 
-    assert null_option(Labelled) == "No author"
-    assert null_option(PerRequest) == "Nobody"
-    request = RequestFactory().get("/admin/testapp/book/", {"anon": "1"})
-    assert null_option(PerRequest, request=request) == "Anonymous"
+        assert null_option(Labelled) == "No author"
+        assert null_option(PerRequest) == "Nobody"
+        request = RequestFactory().get("/admin/testapp/book/", {"anon": "1"})
+        assert null_option(PerRequest, request=request) == "Anonymous"
 
+    def test_without_a_model_admin_it_is_a_dash(self):
+        filter_instance = BaseSelectFilter.__new__(BaseSelectFilter)
 
-def test_without_a_model_admin_it_is_a_dash():
-    filter_instance = BaseSelectFilter.__new__(BaseSelectFilter)
+        assert filter_instance.get_null_label(None) == "-"
+        assert filter_instance.null_label_display == "-"
 
-    assert filter_instance.get_null_label(None) == "-"
-    assert filter_instance.null_label_display == "-"
+    @pytest.mark.django_db
+    def test_async_options_and_the_admin_autocomplete_use_it(self):
+        class Labelled(AuthorAutocompleteFilter):
+            null_label = "No author"
 
+        filter_instance = build(Labelled)
+        html = render_to_string(
+            filter_instance.template,
+            {"spec": filter_instance, "title": filter_instance.title, "choices": []},
+        )
+        assert 'data-null-label="No author"' in html
 
-@pytest.mark.django_db
-def test_async_options_and_the_admin_autocomplete_use_it():
-    class Labelled(AuthorAutocompleteFilter):
-        null_label = "No author"
+        class AsyncLabelled(AuthorFilter):
+            async_call = True
+            null_label = "No author"
 
-    filter_instance = build(Labelled)
-    html = render_to_string(
-        filter_instance.template,
-        {"spec": filter_instance, "title": filter_instance.title, "choices": []},
-    )
-    assert 'data-null-label="No author"' in html
-
-    class AsyncLabelled(AuthorFilter):
-        async_call = True
-        null_label = "No author"
-
-    request = RequestFactory().get("/admin/testapp/book/")
-    request.user = AnonymousUser()
-    async_filter = AsyncLabelled(request, {}, Book, admin.site._registry[Book])
-    options = async_filter._build_async_options(request, [("1", "One")])
-    assert options[-1] == ("__null__", "No author")
+        request = RequestFactory().get("/admin/testapp/book/")
+        request.user = AnonymousUser()
+        async_filter = AsyncLabelled(request, {}, Book, admin.site._registry[Book])
+        options = async_filter._build_async_options(request, [("1", "One")])
+        assert options[-1] == ("__null__", "No author")

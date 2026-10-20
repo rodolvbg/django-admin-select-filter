@@ -16,30 +16,33 @@ pytestmark = [
 ]
 
 
-def test_scripts_carry_the_policy_nonce():
-    from django.utils.csp import CSP
+class TestContentSecurityPolicy:
+    """Script nonces follow Django's CSP middleware."""
 
-    User.objects.create_superuser("admin", "admin@example.com", "password")
-    with override_settings(
-        MIDDLEWARE=[
-            *MIDDLEWARE,
-            "django.middleware.csp.ContentSecurityPolicyMiddleware",
-        ],
-        SECURE_CSP={"default-src": [CSP.SELF], "script-src": [CSP.NONCE]},
-    ):
-        client = Client()
-        client.login(username="admin", password="password")
-        response = client.get("/admin/testapp/book/")
+    def test_scripts_carry_the_policy_nonce(self):
+        from django.utils.csp import CSP
 
-    header = response.headers["Content-Security-Policy"]
-    match = re.search(r"'nonce-([^']+)'", header)
-    assert match
-    policy_nonce = match.group(1)
-    content = response.content.decode()
-    scripts = re.findall(
-        r'<script type="module" nonce="([^"]+)" src="[^"]*admin_select_filter/js/',
-        content,
-    )
-    assert scripts
-    assert set(scripts) == {policy_nonce}
-    assert "importmap" not in content
+        User.objects.create_superuser("admin", "admin@example.com", "password")
+        with override_settings(
+            MIDDLEWARE=[
+                *MIDDLEWARE,
+                "django.middleware.csp.ContentSecurityPolicyMiddleware",
+            ],
+            SECURE_CSP={"default-src": [CSP.SELF], "script-src": [CSP.NONCE]},
+        ):
+            client = Client()
+            client.login(username="admin", password="password")
+            response = client.get("/admin/testapp/book/")
+
+        header = response.headers["Content-Security-Policy"]
+        match = re.search(r"'nonce-([^']+)'", header)
+        assert match
+        policy_nonce = match.group(1)
+        content = response.content.decode()
+        scripts = re.findall(
+            r'<script type="module" nonce="([^"]+)" src="[^"]*admin_select_filter/js/',
+            content,
+        )
+        assert scripts
+        assert set(scripts) == {policy_nonce}
+        assert "importmap" not in content
