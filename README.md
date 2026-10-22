@@ -165,6 +165,24 @@ Selected values are joined in the query string with `multiple_separator`
 option is dropped in this mode — clearing every selected chip already means
 no filter.
 
+### Each feature, a mixin
+
+`BaseSelectFilter` (and so both filters) is the sum of one mixin per
+feature, in `django_admin_select_filter.mixins`: each one has its options,
+its part of the filtering and the script it needs, added to `media` only
+when it's on.
+
+| Mixin | Options |
+|---|---|
+| `UsedValuesMixin` | `filter_only_used_values` |
+| `NullOptionMixin` | `nullable`, `null_label` |
+| `MultipleValuesMixin` | `multiple`, `multiple_separator` |
+| `SearchableMixin` | `searchable` |
+| `AsyncOptionsMixin` | `async_call`, `async_call_url` |
+
+The options are set on the filter as always (`multiple = True`): the
+mixins are where to look for, or override, what each one does.
+
 ## Async options (`async_call = True`)
 
 Set `async_call = True` on a filter to defer loading its options until the

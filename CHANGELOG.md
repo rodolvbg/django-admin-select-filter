@@ -10,6 +10,15 @@
   autocomplete endpoint (`admin:autocomplete`), without adding
   `django_admin_select_filter_path()` to the URLs.
 
+### Changed
+
+- `BaseSelectFilter` is now the sum of one mixin per feature
+  (`django_admin_select_filter.mixins`: `UsedValuesMixin`,
+  `NullOptionMixin`, `MultipleValuesMixin`, `SearchableMixin`,
+  `AsyncOptionsMixin`), each with its options, its part of the filtering
+  and its script. Nothing changes for the filters: same options, same
+  behaviour.
+
 ### Fixed
 
 - With django-unfold, the search box of a filter couldn't be typed in: its

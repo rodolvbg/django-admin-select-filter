@@ -4,7 +4,6 @@ import functools
 from typing import TYPE_CHECKING
 
 from django.apps import apps
-from django.contrib.admin.filters import SimpleListFilter
 from django.contrib.admin.widgets import get_select2_language
 from django.core.exceptions import FieldDoesNotExist, ImproperlyConfigured
 from django.db import models
@@ -12,8 +11,23 @@ from django.forms import Media
 from django.templatetags.static import static
 from django.urls import reverse
 from django.utils.functional import cached_property
-from django.utils.safestring import mark_safe
-from django.utils.translation import gettext
+
+from django_admin_select_filter.mixins import (
+    ASYNC_CALL_URL_NAME,
+    AsyncOptionsMixin,
+    MultipleValuesMixin,
+    NullOptionMixin,
+    SearchableMixin,
+    UsedValuesMixin,
+)
+
+__all__ = [
+    "ASYNC_CALL_URL_NAME",  # Where it always was (it's the mixins' now).
+    "BaseSelectFilter",
+    "ChoiceFilter",
+    "ForeignKeyFilter",
+    "field_list_filter",
+]
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -24,131 +38,52 @@ if TYPE_CHECKING:
 
     from django_admin_select_filter.types import Choices
 
-# The default ``name`` django_admin_select_filter_path() registers its route
-# under. Imported from there (rather than declared alongside it) so filters
-# and urls.py share one source of truth without a circular import — urls.py
-# already depends on views.py, which depends on this module.
-ASYNC_CALL_URL_NAME = "options"
 
-
-def _csp_nonce(request: HttpRequest | None) -> str | None:
-    """Return the request's CSP nonce as a plain string, or ``None``.
-
-    Django's own CSP middleware (6.0+) keeps it in ``request._csp_nonce``
-    (read through ``django.middleware.csp.get_nonce()``), the third-party
-    ``django-csp`` package in ``request.csp_nonce``: this picks up either
-    without a dependency on which one (or neither) a project uses.
-
-    Not ``if nonce``: Django's own ``LazyNonce`` evaluates falsy until first
-    accessed elsewhere, even though converting it here would happily
-    generate one (and add it to the policy's header) — only its absence
-    (a plain ``None``) means no CSP nonce support is active at all.
-    """
-    nonce = getattr(request, "csp_nonce", None)
-    if nonce is None:
-        nonce = getattr(request, "_csp_nonce", None)
-    return str(nonce) if nonce is not None else None
-
-
-def _module_script(path: str, request: HttpRequest | None) -> Any:
-    """Render ``path`` as an ES module ``<script>`` tag for use in a ``Media.js`` list.
-
-    Adds a CSP nonce attribute when the request has one (see
-    :func:`_csp_nonce`) — needed for a ``script-src`` policy that only
-    allows nonced scripts. A policy allowing the static files' origin
-    (``'self'``) needs none: the package renders no inline script.
-
-    ``django.forms.Script`` could build this ``<script>`` natively with a
-    ``type="module"`` attribute, but only from Django 5.2 on; this package
-    supports Django >= 4.2, so it renders the tag itself instead, via the
-    same ``__html__`` escape hatch ``Media.render_js()`` has always deferred
-    to when present rather than building the tag itself — this works
-    uniformly back to 4.2.
-
-    Returns ``Any`` rather than a precise type: django-stubs types
-    ``Media.js`` as ``Sequence[str] | None``, not accounting for a
-    ``SafeString``'s ``__html__()`` being used this way.
-    """
-    nonce = _csp_nonce(request)
-    nonce_attr = f' nonce="{nonce}"' if nonce else ""
-    return mark_safe(
-        f'<script type="module"{nonce_attr} src="{static(path)}"></script>'
-    )
-
-
-class BaseSelectFilter(SimpleListFilter):
+class BaseSelectFilter(
+    UsedValuesMixin,
+    NullOptionMixin,
+    MultipleValuesMixin,
+    SearchableMixin,
+    AsyncOptionsMixin,
+):
     """Shared plumbing for the project's Select2-powered admin list filters.
 
     Handles everything that doesn't depend on where the options come from:
-    null-value support, facet counts, queryset filtering by the raw lookup
-    value, and the Select2 template's ``choices()`` rendering. Subclasses
-    only need to supply the available options (see ``get_options``,
-    ``get_async_options`` and ``lookups`` on :class:`ForeignKeyFilter` and
-    :class:`ChoiceFilter` for the two supported shapes).
+    queryset filtering by the raw lookup value, and the Select2 template's
+    ``choices()`` rendering. Subclasses only need to supply the available
+    options (see ``get_options``, ``get_async_options`` and ``lookups`` on
+    :class:`ForeignKeyFilter` and :class:`ChoiceFilter` for the two
+    supported shapes).
+
+    Each feature is a mixin of its own (``django_admin_select_filter.mixins``),
+    with its options, its part of the filtering and of ``media``:
+
+    - ``filter_only_used_values`` (:class:`UsedValuesMixin`): only the
+      values already in use.
+    - ``nullable``, ``null_label`` (:class:`NullOptionMixin`): the
+      empty-value option.
+    - ``multiple``, ``multiple_separator`` (:class:`MultipleValuesMixin`):
+      several values at once.
+    - ``searchable`` (:class:`SearchableMixin`): Select2's search input.
+    - ``async_call``, ``async_call_url`` (:class:`AsyncOptionsMixin`):
+      options loaded through an API.
+
+    And its own:
 
     ``parameter_name``
         Lookup applied to the changelist queryset, such as ``"group"`` or
         ``"groups"``. Required.
-    ``filter_only_used_values``
-        When true, only expose relations already present in the current
-        ModelAdmin queryset. It defaults to true.
-    ``async_call``
-        When true, defer loading options until Select2 requests them through
-        the API. It defaults to false.
-    ``searchable``
-        When false, hide Select2's search input and behave like a plain
-        dropdown. Best for a short, static option list. It defaults to true.
-    ``nullable``
-        Controls whether the empty-value option is available. When left as
-        ``None``, the value is inferred from the configured model field.
-    ``null_label``
-        Text of the empty-value option. When left as ``None``, the admin's
-        own empty value display is used (``ModelAdmin.empty_value_display``,
-        ``"-"`` by default), as Django's list filters do. Override
-        ``get_null_label(request)`` to choose it per request.
     ``title``
         Label shown by Django above the filter. By default it uses the related
         model admin's plural verbose name.
-    ``multiple``
-        When true, the Select2 widget accepts several values at once and
-        ``queryset()`` filters with an ``__in`` lookup. Selected values are
-        stored in the query string joined by ``multiple_separator``, so
-        configured values (primary keys, option values) must not contain it.
-        It defaults to false.
-    ``multiple_separator``
-        Character joining multiple selected values in the query string. It
-        defaults to ``","``.
-    ``async_call_url``
-        URL the Select2 widget's JS fetches options from when ``async_call``
-        is true. Left as ``None`` (the default), it resolves to
-        ``reverse(f"admin_select_filter:{ASYNC_CALL_URL_NAME}")`` — the
-        shared endpoint registered via ``django_admin_select_filter_path()``.
-        ``reverse()`` is what makes this work correctly regardless of the
-        admin page the filter is rendered on and wherever that route is
-        actually mounted — a bare path segment like ``"options/"`` would
-        resolve relative to the *current page*, not that mount point, and
-        silently hit the wrong URL. If you pass a custom ``name=`` to
-        ``django_admin_select_filter_path()``, set ``async_call_url``
-        explicitly on every ``async_call`` filter to match — there's no way
-        for a filter to otherwise discover which name was used for the
-        specific route it should call. Also set it explicitly to point a
-        filter at a genuinely different, custom view.
+    ``theme``
+        Select2 theme; ``None`` picks one for the admin (see
+        ``select2_theme``).
     """
 
-    filter_only_used_values: ClassVar[bool] = True
-    async_call: ClassVar[bool] = False
-    searchable: ClassVar[bool] = True
-    nullable: bool | None = None
-    all_value: ClassVar[str] = "__all__"
-    null_value: ClassVar[str] = "__null__"
-    null_label: ClassVar[Any] = None
-    multiple: ClassVar[bool] = False
-    multiple_separator: ClassVar[str] = ","
     #: Select2 theme; ``None`` picks one for the admin (see ``select2_theme``).
     theme: ClassVar[str | None] = None
-    async_call_url: str | None = None
     title: Any | None = None
-    parameter_name: str | None = None
 
     def __init__(
         self,
@@ -158,40 +93,15 @@ class BaseSelectFilter(SimpleListFilter):
         model_admin: ModelAdmin[Any],
     ) -> None:
         """Configure the filter for an admin changelist request."""
-        if self.nullable is None:
-            self.nullable = self._is_nullable(admin_model)
         self.request = request
         self.model_admin = model_admin
         self.admin_app_label = admin_model._meta.app_label
         self.admin_model_name = admin_model._meta.model_name
-        self.has_null_option = (
-            not self.async_call or not self.filter_only_used_values
-        ) and self._has_null_option()
         self.facets = self.request.GET.get("_facets") == "True"
-        if self.async_call and self.async_call_url is None:
-            self.async_call_url = reverse(f"admin_select_filter:{ASYNC_CALL_URL_NAME}")
-
         super().__init__(request, params, admin_model, model_admin)
 
-    def get_null_label(self, request: HttpRequest | None) -> str:
-        """Text of the empty-value option: ``null_label``, else the admin's
-        empty value display (``"-"`` by default)."""
-        if self.null_label is not None:
-            return str(self.null_label)
-        get_empty_value_display = getattr(
-            getattr(self, "model_admin", None), "get_empty_value_display", None
-        )
-        return (
-            str(get_empty_value_display()) if callable(get_empty_value_display) else "-"
-        )
-
-    @property
-    def null_label_display(self) -> str:
-        """The empty-value option's text for the changelist request."""
-        return self.get_null_label(getattr(self, "request", None))
-
     @cached_property
-    def model_admin_queryset(self) -> models.QuerySet[Any]:
+    def model_admin_queryset(self) -> models.QuerySet[Any]:  # type: ignore[override]
         """Return and cache the source ModelAdmin queryset when first needed."""
         return self.model_admin.get_queryset(self.request)
 
@@ -221,10 +131,10 @@ class BaseSelectFilter(SimpleListFilter):
 
     @property
     def media(self) -> Media:
-        """Static assets this filter's template needs, based on its own
-        configuration — one JS module per optional capability (``async_call``,
-        non-``searchable``, ``multiple``) — mirroring ``ModelAdmin.media``'s
-        own pattern of a ``@property`` computing a ``Media`` instance from
+        """Static assets this filter's template needs: Select2's, then each
+        feature's script when it's on (``async_call``, non-``searchable``,
+        ``multiple``: see the mixins) — mirroring ``ModelAdmin.media``'s own
+        pattern of a ``@property`` computing a ``Media`` instance from
         instance state, rather than a static inner ``class Media``.
 
         Access ``{{ spec.media.css }}``/``{{ spec.media.js }}`` separately in
@@ -238,43 +148,16 @@ class BaseSelectFilter(SimpleListFilter):
         All of them are external files: nothing inline for a Content
         Security Policy to block.
         """
-        request = getattr(self, "request", None)
-        js = [_module_script("admin_select_filter/js/core.js", request)]
-        if self.async_call:
-            js.append(
-                _module_script("admin_select_filter/js/async_options.js", request)
-            )
-        if not self.searchable:
-            js.append(
-                _module_script("admin_select_filter/js/non_searchable.js", request)
-            )
-        if self.multiple:
-            js.append(
-                _module_script("admin_select_filter/js/multiple_navigation.js", request)
-            )
         css = ["admin/css/vendor/select2/select2.css"]
         if self.select2_theme == "admin-autocomplete":
             # The layout of the admin's autocomplete widgets.
             css.append("admin/css/autocomplete.css")
         css.append("admin_select_filter/css/admin_select2_filter.css")
-        return Media(css={"all": css}, js=js)
-
-    def _is_nullable(self, admin_model: type[models.Model]) -> bool:
-        """Determine whether the configured field accepts null values."""
-        for field in admin_model._meta.get_fields():
-            if self.parameter_name in (field.name, getattr(field, "attname", None)):
-                return bool(getattr(field, "null", False))
-        return False
-
-    def _has_null_option(self) -> bool:
-        """Return whether the filter should expose its null-value option."""
-        if not self.nullable or self.parameter_name is None:
-            return False
-        if not self.filter_only_used_values:
-            return True
-        return self.model_admin_queryset.filter(
-            **{f"{self.parameter_name}__isnull": True}
-        ).exists()
+        core = Media(
+            css={"all": css},
+            js=[self._module_script("admin_select_filter/js/core.js")],
+        )
+        return core + super().media
 
     def _resolve_field(self, admin_model: type[models.Model]) -> Any | None:
         """Walk ``parameter_name`` across relations and return its final field.
@@ -303,67 +186,6 @@ class BaseSelectFilter(SimpleListFilter):
         except FieldDoesNotExist:
             return None
 
-    def _get_option_facet_counts(self) -> dict[str, int]:
-        """Count options for either filter presentation.
-
-        Asynchronous filters use these counts in their API results. Synchronous
-        filters may reuse the helper, although Django's standard list-filter
-        rendering already calculates its own facet counts.
-        """
-        if self.parameter_name is None:
-            return {}
-        counts = (
-            self.model_admin_queryset.order_by()
-            .values(self.parameter_name)
-            .annotate(count=models.Count("pk"))
-        )
-        return {
-            self.null_value if value is None else str(value): count
-            for value, count in counts.values_list(self.parameter_name, "count")
-        }
-
-    def _build_async_options(
-        self,
-        request: HttpRequest,
-        items: Choices,
-    ) -> Choices:
-        """Assemble the "All"/items/null options, applying facet counts if asked.
-
-        The "All" option is skipped when ``multiple`` is enabled: clearing
-        every selected value already means "no filter" for a multi-select.
-        """
-        options = (
-            list(items) if self.multiple else [(self.all_value, gettext("All")), *items]
-        )
-        if self._has_null_option():
-            options.append((self.null_value, self.get_null_label(request)))
-        if request.GET.get("facets") == "true":
-            facet_counts = self._get_option_facet_counts()
-            options = [
-                (
-                    value,
-                    label
-                    if value == self.all_value
-                    else f"{label} ({facet_counts.get(value, 0)})",
-                )
-                for value, label in options
-            ]
-        return options
-
-    def has_output(self) -> bool:
-        """Keep asynchronous filters visible before their options are loaded."""
-        return self.async_call or super().has_output()
-
-    def selected_values(self) -> list[str]:
-        """Return the selected raw values, splitting on ``multiple_separator``
-        when ``multiple`` is enabled. Empty when nothing is selected."""
-        value = self.value()
-        if not value:
-            return []
-        if not self.multiple:
-            return [value]
-        return [item for item in value.split(self.multiple_separator) if item]
-
     def queryset(
         self,
         request: HttpRequest,
@@ -375,18 +197,7 @@ class BaseSelectFilter(SimpleListFilter):
         values = self.selected_values()
         if not values:
             return queryset
-        if not self.multiple:
-            value = values[0]
-            if value == self.null_value:
-                return queryset.filter(**{f"{self.parameter_name}__isnull": True})
-            return queryset.filter(**{self.parameter_name: value})
-        real_values = [value for value in values if value != self.null_value]
-        condition = models.Q()
-        if real_values:
-            condition |= models.Q(**{f"{self.parameter_name}__in": real_values})
-        if self.null_value in values:
-            condition |= models.Q(**{f"{self.parameter_name}__isnull": True})
-        return queryset.filter(condition)
+        return queryset.filter(self.values_condition(values))
 
     def choices(self, changelist: Any) -> Iterator[dict[str, Any]]:  # type: ignore[override]
         """Yield Django choices with the raw lookup key required by Select2.
@@ -401,40 +212,13 @@ class BaseSelectFilter(SimpleListFilter):
             selected = not selected_values if index == 0 else key in selected_values
             yield {**choice, "key": key, "selected": selected}
 
-    def _option_items(
-        self,
-        request: HttpRequest | None = None,
-        q: str = "",
-    ) -> Choices:
-        """Return every available option as ``(key, label)`` string pairs."""
-        raise NotImplementedError
-
-    def _selected_option_items(self) -> Choices:
-        """Return only the currently selected options, as ``(key, label)`` pairs."""
-        raise NotImplementedError
-
-    def get_async_options(
-        self,
-        request: HttpRequest,
-        q: str,
-    ) -> Choices:
-        """Return Select2 options for an API request and its search term."""
-        return self._build_async_options(
-            request, self._option_items(request=request, q=q)
-        )
-
     def lookups(
         self,
         request: HttpRequest,
         model_admin: ModelAdmin[Any],
     ) -> Choices:
         """Return choices rendered initially by Django's list-filter template."""
-        options = (
-            self._selected_option_items() if self.async_call else self._option_items()
-        )
-        if self.has_null_option:
-            options.append((self.null_value, self.get_null_label(request)))
-        return options
+        return self.initial_options(request)
 
 
 class ForeignKeyFilter(BaseSelectFilter):
@@ -562,10 +346,7 @@ class ForeignKeyFilter(BaseSelectFilter):
         assert self.model is not None
         queryset = self.model._default_manager.all()
         if self.filter_only_used_values and self.parameter_name is not None:
-            used_values = self.model_admin_queryset.values_list(
-                self.parameter_name, flat=True
-            )
-            queryset = queryset.filter(pk__in=used_values)
+            queryset = queryset.filter(pk__in=self.used_values())
         if self.only:
             queryset = queryset.only(*self.only)
         if self.ordering:
@@ -671,9 +452,7 @@ class ChoiceFilter(BaseSelectFilter):
         options = self.options
         if self.filter_only_used_values and self.parameter_name is not None:
             used_values = set(
-                self.model_admin_queryset.exclude(
-                    **{f"{self.parameter_name}__isnull": True}
-                ).values_list(self.parameter_name, flat=True)
+                self.used_values().exclude(**{f"{self.parameter_name}__isnull": True})
             )
             options = [
                 (value, label) for value, label in options if value in used_values

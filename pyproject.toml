@@ -25,7 +25,15 @@ classifiers = [
 ]
 dynamic = [ "readme" ]
 dependencies = [ "django>=4.2" ]
-optional-dependencies.dev = [ "django-stubs>=5", "mypy>=1.11", "pre-commit>=4", "ruff>=0.6", "tox>=4", "tox-uv>=1", "unittest-parametrize>=1.9" ]
+optional-dependencies.dev = [
+  "django-stubs>=5",
+  "mypy>=1.11",
+  "pre-commit>=4",
+  "ruff>=0.6",
+  "tox>=4",
+  "tox-uv>=1",
+  "unittest-parametrize>=1.9"
+]
 optional-dependencies.test = [
   "django-stubs-ext>=5",
   "inline-snapshot>=0.20.10",
@@ -40,7 +48,15 @@ urls.Homepage = "https://github.com/rodolvbg/django-admin-select-filter"
 urls.Repository = "https://github.com/rodolvbg/django-admin-select-filter"
 
 [dependency-groups]
-dev = [ "django-stubs>=5", "mypy>=1.11", "pre-commit>=4", "ruff>=0.6", "tox>=4", "tox-uv>=1", "unittest-parametrize>=1.9.0" ]
+dev = [
+  "django-stubs>=5",
+  "mypy>=1.11",
+  "pre-commit>=4",
+  "ruff>=0.6",
+  "tox>=4",
+  "tox-uv>=1",
+  "unittest-parametrize>=1.9"
+]
 test = [
   "django-stubs-ext>=5",
   "django-unfold>=0.108; python_version>='3.12'",
