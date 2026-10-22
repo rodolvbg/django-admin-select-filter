@@ -105,6 +105,8 @@ class TestTranslationCatalogs(ParametrizedTestCase, SimpleTestCase):
 class TestSpanishChangelist(TestCase):
     """The changelist filter texts rendered in other languages."""
 
+    user: User
+
     @classmethod
     def setUpTestData(cls):
         cls.user = User.objects.create_superuser("admin", "a@example.com", "x")

@@ -51,6 +51,8 @@ def country_site():
 class TestAdminAutocomplete(TestCase):
     """A filter backed by the admin's own autocomplete endpoint."""
 
+    user: User
+
     @classmethod
     def setUpTestData(cls):
         cls.user = User.objects.create_superuser(

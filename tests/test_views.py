@@ -17,6 +17,8 @@ from tests.testapp.models import Author, Book, Country
 class TestSelect2FilterOptionsView(TestCase):
     """The options endpoint, end to end."""
 
+    user: User
+
     @classmethod
     def setUpTestData(cls):
         cls.user = User.objects.create_superuser(

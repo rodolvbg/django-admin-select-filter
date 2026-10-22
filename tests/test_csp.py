@@ -15,6 +15,8 @@ from tests.settings import MIDDLEWARE
 class TestContentSecurityPolicy(TestCase):
     """Script nonces follow Django's CSP middleware."""
 
+    user: User
+
     @classmethod
     def setUpTestData(cls):
         cls.user = User.objects.create_superuser(
