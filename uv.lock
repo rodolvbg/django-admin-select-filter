@@ -472,7 +472,7 @@ wheels = [
 
 [[package]]
 name = "django-admin-select-filter"
-version = "0.1.3"
+version = "0.1.4"
 source = { editable = "." }
 dependencies = [
     { name = "django", version = "5.2.17", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
@@ -555,7 +555,7 @@ dev = [
     { name = "ruff", specifier = ">=0.6" },
     { name = "tox", specifier = ">=4" },
     { name = "tox-uv", specifier = ">=1" },
-    { name = "unittest-parametrize", specifier = ">=1.9.0" },
+    { name = "unittest-parametrize", specifier = ">=1.9" },
 ]
 test = [
     { name = "django-stubs-ext", specifier = ">=5" },
