@@ -124,6 +124,10 @@ It only supports `async_call = False`; for an `async_call` filter, define a
 dedicated subclass instead (`field_list_filter()` raises `TypeError` right
 away if you pass it one, rather than fail silently later).
 
+Pass `parameter_name` to give it its own name in the URL, while it keeps
+filtering by the field: `("author__country", field_list_filter(ForeignKeyFilter,
+parameter_name="country"))` reads `?country=3`.
+
 ### Shared options
 
 Both filters share the same options: `filter_only_used_values`, `async_call`,
@@ -131,6 +135,23 @@ Both filters share the same options: `filter_only_used_values`, `async_call`,
 `parameter_name` (e.g. `"author__status"`), resolving the field — and, for
 `ForeignKeyFilter`, the `model` — by walking each `__`-separated relation in
 turn, forward or reverse.
+
+`parameter_name` is what the query string shows (`?author=3`), and by
+default also the lookup the filter applies. Set `field_name` when they
+differ — a shorter or translated name in the URL, or two filters on the
+same field:
+
+```python
+class CountryFilter(ForeignKeyFilter):
+    parameter_name = _("country")  # ?country=3, or ?país=3 in Spanish
+    field_name = "author__country"  # what it filters by
+```
+
+Everything that touches the database (the lookup, the used values, the
+empty-value option, `model` and the choices' inference, the async counts)
+reads `field_name`; the URL and the async endpoint read `parameter_name`.
+A translated `parameter_name` follows the request's language, except with
+the async endpoint's `use_registry`, which keeps the one it was built in.
 
 `theme` sets the Select2 theme; by default Select2's own, styled like the
 admin (or `admin-autocomplete` with [django-unfold](docs/themes/unfold.md)).

@@ -71,8 +71,15 @@ class BaseSelectFilter(
     And its own:
 
     ``parameter_name``
-        Lookup applied to the changelist queryset, such as ``"group"`` or
+        The URL's parameter (``?group=3``), and, without ``field_name``, the
+        lookup applied to the changelist queryset, such as ``"group"`` or
         ``"groups"``. Required.
+    ``field_name``
+        The lookup applied to the changelist queryset when it isn't
+        ``parameter_name``: ``parameter_name = "country"`` with
+        ``field_name = "author__country"`` filters by the author's country
+        as ``?country=3``. The field (its choices, its related model, its
+        nullability) is found by it.
     ``title``
         Label shown by Django above the filter. By default it uses the related
         model admin's plural verbose name.
@@ -160,18 +167,18 @@ class BaseSelectFilter(
         return core + super().media
 
     def _resolve_field(self, admin_model: type[models.Model]) -> Any | None:
-        """Walk ``parameter_name`` across relations and return its final field.
+        """Walk ``field_lookup`` across relations and return its final field.
 
         Handles a nested lookup, such as ``"publisher__country"``, by
         following each ``__``-separated segment's relation in turn — forward
         or reverse — except the last, whose field is returned as-is. Returns
-        ``None`` when ``parameter_name`` is unset or any segment doesn't
+        ``None`` when ``field_lookup`` is unset or any segment doesn't
         resolve to a real field.
         """
-        if self.parameter_name is None:
+        if self.field_lookup is None:
             return None
         current_model: type[models.Model] = admin_model
-        parts = self.parameter_name.split("__")
+        parts = self.field_lookup.split("__")
         for part in parts[:-1]:
             try:
                 field = current_model._meta.get_field(part)
@@ -192,7 +199,7 @@ class BaseSelectFilter(
         queryset: models.QuerySet[Any],
     ) -> models.QuerySet[Any]:
         """Apply the selected value(s) or the null lookup to the changelist queryset."""
-        if self.parameter_name is None:
+        if self.field_lookup is None:
             return queryset
         values = self.selected_values()
         if not values:
@@ -228,8 +235,9 @@ class ForeignKeyFilter(BaseSelectFilter):
 
     ``model``
         Related model whose instances become the available options. When left
-        unset, it's inferred by walking ``parameter_name`` across the admin
-        model's relations — including a nested lookup such as
+        unset, it's inferred by walking the lookup (``field_name``, else
+        ``parameter_name``) across the admin model's relations — including a
+        nested lookup such as
         ``"publisher__country"`` — and taking the last relation's target
         model. Configure it explicitly when it can't be inferred (the lookup
         isn't a real relation chain) or to point elsewhere.
@@ -242,8 +250,9 @@ class ForeignKeyFilter(BaseSelectFilter):
         When true, Select2 loads and searches the options from the admin's
         own autocomplete endpoint (``admin:autocomplete``, the one of
         ``autocomplete_fields``) — no ``django_admin_select_filter_path()``
-        needed. ``parameter_name`` must end in a forward ``ForeignKey`` or
-        ``ManyToManyField``, and the related model needs a ``ModelAdmin``
+        needed. The lookup (``field_name``, else ``parameter_name``) must end
+        in a forward ``ForeignKey`` or ``ManyToManyField``, and the related
+        model needs a ``ModelAdmin``
         with ``search_fields`` on the site. It searches every related object
         (``filter_only_used_values`` doesn't apply) and has no facet counts.
         It defaults to false.
@@ -275,7 +284,7 @@ class ForeignKeyFilter(BaseSelectFilter):
         if self.model is None:
             raise TypeError(
                 f"{type(self).__name__}.model must be configured, or "
-                f"{self.parameter_name!r} must resolve to a related model"
+                f"{self.field_lookup!r} must resolve to a related model"
             )
 
         if self.title is None:
@@ -300,7 +309,7 @@ class ForeignKeyFilter(BaseSelectFilter):
         name = type(self).__name__
         if not isinstance(field, models.ForeignKey | models.ManyToManyField):
             raise ImproperlyConfigured(
-                f"{name}.admin_autocomplete needs {self.parameter_name!r} to end "
+                f"{name}.admin_autocomplete needs {self.field_lookup!r} to end "
                 "in a ForeignKey or a ManyToManyField."
             )
         site = model_admin.admin_site
@@ -322,7 +331,7 @@ class ForeignKeyFilter(BaseSelectFilter):
     def _resolve_model(
         self, admin_model: type[models.Model]
     ) -> type[models.Model] | None:
-        """Return ``parameter_name``'s target model, following relations.
+        """Return ``field_lookup``'s target model, following relations.
 
         Handles a nested lookup, such as ``"publisher__country"``, since it
         relies on :meth:`BaseSelectFilter._resolve_field` to walk each
@@ -345,7 +354,7 @@ class ForeignKeyFilter(BaseSelectFilter):
         """
         assert self.model is not None
         queryset = self.model._default_manager.all()
-        if self.filter_only_used_values and self.parameter_name is not None:
+        if self.filter_only_used_values and self.field_lookup is not None:
             queryset = queryset.filter(pk__in=self.used_values())
         if self.only:
             queryset = queryset.only(*self.only)
@@ -428,13 +437,11 @@ class ChoiceFilter(BaseSelectFilter):
             if not field_choices:
                 raise TypeError(
                     f"{type(self).__name__}.options must be configured, or "
-                    f"{self.parameter_name!r} must name a field with choices"
+                    f"{self.field_lookup!r} must name a field with choices"
                 )
             self.options = [(value, str(label)) for value, label in field_choices]
         if self.title is None:
-            self.title = (
-                field.verbose_name if field is not None else self.parameter_name
-            )
+            self.title = field.verbose_name if field is not None else self.field_lookup
         super().__init__(request, params, admin_model, model_admin)
 
     def get_options(
@@ -450,9 +457,9 @@ class ChoiceFilter(BaseSelectFilter):
         """
         assert self.options is not None
         options = self.options
-        if self.filter_only_used_values and self.parameter_name is not None:
+        if self.filter_only_used_values and self.field_lookup is not None:
             used_values = set(
-                self.used_values().exclude(**{f"{self.parameter_name}__isnull": True})
+                self.used_values().exclude(**{f"{self.field_lookup}__isnull": True})
             )
             options = [
                 (value, label) for value, label in options if value in used_values
@@ -491,9 +498,12 @@ class ChoiceFilter(BaseSelectFilter):
 
 @functools.cache
 def _bind_parameter_name(
-    select_filter_class: type[BaseSelectFilter], parameter_name: str
+    select_filter_class: type[BaseSelectFilter],
+    parameter_name: str,
+    field_name: str | None = None,
 ) -> type[BaseSelectFilter]:
-    """Return (and cache) a ``select_filter_class`` subclass bound to ``parameter_name``.
+    """Return (and cache) a ``select_filter_class`` subclass bound to
+    ``parameter_name`` (and ``field_name``).
 
     Cached so repeated ``field_list_filter()`` calls for the same
     ``(class, field)`` pair across requests reuse one dynamic subclass
@@ -502,12 +512,13 @@ def _bind_parameter_name(
     return type(
         f"{select_filter_class.__name__}[{parameter_name}]",
         (select_filter_class,),
-        {"parameter_name": parameter_name},
+        {"parameter_name": parameter_name, "field_name": field_name},
     )
 
 
 def field_list_filter(
     select_filter_class: type[BaseSelectFilter],
+    parameter_name: str | None = None,
 ) -> Any:
     """Adapt ``select_filter_class`` for ``list_filter``'s ``(field_name,
     filter_class)`` tuple shorthand — Django's built-in way to reuse one
@@ -521,6 +532,10 @@ def field_list_filter(
 
     Plain classes (``AuthorFilter`` set with its own ``parameter_name = "author"``)
     still work as before and can be mixed freely with this form.
+
+    The URL's parameter is the field's path (``?author__country=3``), unless
+    ``parameter_name`` names it (``field_list_filter(ForeignKeyFilter,
+    parameter_name="country")``: ``?country=3``, filtering by the field).
 
     This can't return ``select_filter_class`` itself: for a tuple entry,
     Django calls the second element as
@@ -558,8 +573,12 @@ def field_list_filter(
         model_admin: ModelAdmin[Any],
         field_path: str | None = None,
     ) -> BaseSelectFilter:
-        parameter_name = field_path if field_path is not None else field.name
-        bound_class = _bind_parameter_name(select_filter_class, parameter_name)  # type: ignore[arg-type]
+        path = field_path if field_path is not None else field.name
+        bound_class = _bind_parameter_name(
+            select_filter_class,  # type: ignore[arg-type]
+            parameter_name or path,
+            path if parameter_name else None,
+        )
         return bound_class(request, params, model, model_admin)
 
     return factory

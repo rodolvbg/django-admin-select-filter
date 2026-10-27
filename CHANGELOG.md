@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `field_name`: the lookup a filter applies, when it isn't its
+  `parameter_name` — the URL's parameter can be shorter, translated, or
+  shared by two filters of one field (`parameter_name = "country"`,
+  `field_name = "author__country"`).
+- `field_list_filter(filter_class, parameter_name=...)`: the URL's
+  parameter of a tuple-form filter, which keeps filtering by its field.
+
 ## [0.1.4] - 2026-10-24
 
 ### Added

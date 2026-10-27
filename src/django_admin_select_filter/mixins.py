@@ -89,7 +89,12 @@ class SelectFilterFeature(SimpleListFilter):
     #: can be overridden if they conflict with valid values.
     all_value: ClassVar[str] = "__all__"
     null_value: ClassVar[str] = "__null__"
+    #: The query string's parameter (``?author=3``): it names the filter in
+    #: the URL, and the async options' endpoint finds it by it.
     parameter_name: str | None = None
+    #: The lookup it filters by, when it isn't ``parameter_name``
+    #: (``"author__country"`` for ``?country=3``).
+    field_name: str | None = None
 
     request: HttpRequest
     model_admin: ModelAdmin[Any]
@@ -97,6 +102,11 @@ class SelectFilterFeature(SimpleListFilter):
     filter_only_used_values: ClassVar[bool]
     async_call: ClassVar[bool]
     multiple: ClassVar[bool]
+
+    @property
+    def field_lookup(self) -> str | None:
+        """What it filters by: ``field_name``, else ``parameter_name``."""
+        return self.field_name or self.parameter_name
 
     @property
     def media(self) -> Media:
@@ -126,7 +136,7 @@ class SelectFilterFeature(SimpleListFilter):
 
     def value_condition(self, value: str) -> models.Q:
         """The lookup of one selected value."""
-        return models.Q(**{self.parameter_name or "": value})
+        return models.Q(**{self.field_lookup or "": value})
 
     def values_condition(self, values: list[str]) -> models.Q:
         """The lookup of the selected values."""
@@ -153,10 +163,8 @@ class UsedValuesMixin(SelectFilterFeature):
     filter_only_used_values: ClassVar[bool] = True
 
     def used_values(self) -> models.QuerySet[Any]:
-        """The values of ``parameter_name`` the changelist's rows use."""
-        return self.model_admin_queryset.values_list(
-            self.parameter_name or "", flat=True
-        )
+        """The values of ``field_lookup`` the changelist's rows use."""
+        return self.model_admin_queryset.values_list(self.field_lookup or "", flat=True)
 
 
 class NullOptionMixin(SelectFilterFeature):
@@ -209,23 +217,23 @@ class NullOptionMixin(SelectFilterFeature):
     def _is_nullable(self, admin_model: type[models.Model]) -> bool:
         """Determine whether the configured field accepts null values."""
         for field in admin_model._meta.get_fields():
-            if self.parameter_name in (field.name, getattr(field, "attname", None)):
+            if self.field_lookup in (field.name, getattr(field, "attname", None)):
                 return bool(getattr(field, "null", False))
         return False
 
     def _has_null_option(self) -> bool:
         """Return whether the filter should expose its null-value option."""
-        if not self.nullable or self.parameter_name is None:
+        if not self.nullable or self.field_lookup is None:
             return False
         if not self.filter_only_used_values:
             return True
         return self.model_admin_queryset.filter(
-            **{f"{self.parameter_name}__isnull": True}
+            **{f"{self.field_lookup}__isnull": True}
         ).exists()
 
     def value_condition(self, value: str) -> models.Q:
         if value == self.null_value:
-            return models.Q(**{f"{self.parameter_name}__isnull": True})
+            return models.Q(**{f"{self.field_lookup}__isnull": True})
         return super().value_condition(value)
 
     def initial_options(self, request: HttpRequest) -> Choices:
@@ -285,7 +293,7 @@ class MultipleValuesMixin(SelectFilterFeature):
         real_values = [value for value in values if value != self.null_value]
         condition = models.Q()
         if real_values:
-            condition |= models.Q(**{f"{self.parameter_name}__in": real_values})
+            condition |= models.Q(**{f"{self.field_lookup}__in": real_values})
         if self.null_value in values:
             condition |= self.value_condition(self.null_value)
         return condition
@@ -375,16 +383,16 @@ class AsyncOptionsMixin(SelectFilterFeature):
         filters may reuse the helper, although Django's standard list-filter
         rendering already calculates its own facet counts.
         """
-        if self.parameter_name is None:
+        if self.field_lookup is None:
             return {}
         counts = (
             self.model_admin_queryset.order_by()
-            .values(self.parameter_name)
+            .values(self.field_lookup)
             .annotate(count=models.Count("pk"))
         )
         return {
             self.null_value if value is None else str(value): count
-            for value, count in counts.values_list(self.parameter_name, "count")
+            for value, count in counts.values_list(self.field_lookup, "count")
         }
 
     def _build_async_options(
