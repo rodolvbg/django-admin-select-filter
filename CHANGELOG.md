@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- `field_list_filter()` returns a `FieldListFilter` subclass, as Django
+  requires of a `list_filter` tuple: it no longer fails Django's check
+  `admin.E115`.
+- `ForeignKeyFilter`'s default `title` is the field's verbose name, as
+  Django's own filters ("author", not the related model's plural
+  "authors"); for a reverse relation, the related model's verbose name.
+
 ## [0.1.5] - 2026-10-27
 
 ### Added

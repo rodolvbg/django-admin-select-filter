@@ -51,7 +51,7 @@ class TestFieldName(SelectFilterCase):
 
         assert filter_instance.parameter_name == "writer"
         assert filter_instance.model is Author
-        assert filter_instance.title == "authors"
+        assert filter_instance.title == "author"
         assert list(filter_instance.get_options()) == [rowling, tolkien]
         result = filter_instance.queryset(None, Book.objects.all())
         assert list(result.values_list("title", flat=True)) == ["HP"]

@@ -4,6 +4,7 @@ import functools
 from typing import TYPE_CHECKING
 
 from django.apps import apps
+from django.contrib.admin.filters import FieldListFilter
 from django.contrib.admin.widgets import get_select2_language
 from django.core.exceptions import FieldDoesNotExist, ImproperlyConfigured
 from django.db import models
@@ -81,8 +82,9 @@ class BaseSelectFilter(
         as ``?country=3``. The field (its choices, its related model, its
         nullability) is found by it.
     ``title``
-        Label shown by Django above the filter. By default it uses the related
-        model admin's plural verbose name.
+        Label shown by Django above the filter. By default, as Django's own
+        filters: the field's ``verbose_name`` (the last of a nested lookup),
+        else the related model's.
     ``theme``
         Select2 theme; ``None`` picks one for the admin (see
         ``select2_theme``).
@@ -288,11 +290,12 @@ class ForeignKeyFilter(BaseSelectFilter):
             )
 
         if self.title is None:
-            registered_admin = model_admin.admin_site._registry.get(self.model)
-            title_model = (
-                registered_admin.model if registered_admin is not None else self.model
+            # As Django's RelatedFieldListFilter: the field's name ("author",
+            # not "authors"); a reverse relation's, or no field: the model's.
+            field = self._resolve_field(admin_model)
+            self.title = getattr(field, "verbose_name", None) or (
+                self.model._meta.verbose_name
             )
-            self.title = title_model._meta.verbose_name_plural
         if self.admin_autocomplete:
             self._use_admin_autocomplete(request, admin_model, model_admin)
         super().__init__(request, params, admin_model, model_admin)
@@ -538,18 +541,13 @@ def field_list_filter(
     parameter_name="country")``: ``?country=3``, filtering by the field).
 
     This can't return ``select_filter_class`` itself: for a tuple entry,
-    Django calls the second element as
+    Django requires a ``FieldListFilter`` subclass (check ``admin.E115``)
+    and calls it as
     ``filter_class(field, request, params, model, model_admin, field_path=...)``
     — a different signature from :class:`BaseSelectFilter`'s
-    ``(request, params, model, model_admin)`` (Django's own
-    ``FieldListFilter`` protocol, which ``BaseSelectFilter`` doesn't
-    implement). This wraps that call instead, deriving ``parameter_name``
-    from ``field_path`` and constructing ``select_filter_class`` normally —
-    it works because Django only actually requires the returned object to
-    support ``choices()``, ``has_output()`` and the other
-    :class:`~django.contrib.admin.filters.SimpleListFilter` methods that
-    :class:`BaseSelectFilter` already provides, not a real ``FieldListFilter``
-    subclass.
+    ``(request, params, model, model_admin)``. It returns such a subclass
+    instead, which makes a ``select_filter_class`` bound to the field (its
+    ``parameter_name`` derived from ``field_path``) when Django calls it.
 
     Only supports ``async_call = False``. ``Select2FilterOptionsView`` finds
     a matching *async* filter by looking for a ``list_filter`` entry whose
@@ -564,21 +562,37 @@ def field_list_filter(
             f"({select_filter_class.__name__}.async_call is True); use a "
             "dedicated subclass instead."
         )
+    return _field_list_filter(select_filter_class, parameter_name)  # type: ignore[arg-type]
 
-    def factory(
-        field: Any,
-        request: HttpRequest,
-        params: dict[str, Any],
-        model: type[models.Model],
-        model_admin: ModelAdmin[Any],
-        field_path: str | None = None,
-    ) -> BaseSelectFilter:
-        path = field_path if field_path is not None else field.name
-        bound_class = _bind_parameter_name(
-            select_filter_class,  # type: ignore[arg-type]
-            parameter_name or path,
-            path if parameter_name else None,
-        )
-        return bound_class(request, params, model, model_admin)
 
-    return factory
+@functools.cache
+def _field_list_filter(
+    select_filter_class: type[BaseSelectFilter],
+    parameter_name: str | None,
+) -> type[FieldListFilter]:
+    """The ``FieldListFilter`` of ``field_list_filter()`` (one per
+    arguments: the same class each time)."""
+
+    class SelectFieldListFilter(FieldListFilter):
+        def __new__(  # type: ignore[misc]
+            cls,
+            field: Any,
+            request: HttpRequest,
+            params: dict[str, Any],
+            model: type[models.Model],
+            model_admin: ModelAdmin[Any],
+            field_path: str | None = None,
+        ) -> BaseSelectFilter:
+            # Not an instance of cls: Django's __init__ isn't called on it.
+            path = field_path if field_path is not None else field.name
+            bound_class = _bind_parameter_name(
+                select_filter_class,  # type: ignore[arg-type]
+                parameter_name or path,
+                path if parameter_name else None,
+            )
+            return bound_class(request, params, model, model_admin)
+
+    SelectFieldListFilter.__name__ = SelectFieldListFilter.__qualname__ = (
+        f"{select_filter_class.__name__}FieldListFilter"
+    )
+    return SelectFieldListFilter

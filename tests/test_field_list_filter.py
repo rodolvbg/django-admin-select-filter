@@ -2,6 +2,7 @@
 
 import pytest
 from django.contrib import admin
+from django.contrib.admin.filters import FieldListFilter
 from django.contrib.auth.models import User
 from django.test import RequestFactory, TestCase
 from unittest_parametrize import ParametrizedTestCase
@@ -108,6 +109,16 @@ class TestFieldListFilter(ParametrizedTestCase, TestCase):
         )
 
         assert type(first) is type(second)
+
+    def test_is_a_field_list_filter_for_djangos_checks(self):
+        """admin.E115: a tuple's filter must be a FieldListFilter subclass."""
+        factory = field_list_filter(ForeignKeyFilter)
+
+        assert issubclass(factory, FieldListFilter)
+        assert factory.__name__ == "ForeignKeyFilterFieldListFilter"
+        assert factory is field_list_filter(ForeignKeyFilter)
+        assert factory is not field_list_filter(ForeignKeyFilter, "country")
+        assert admin.site._registry[Book].check() == []
 
     def test_rejects_an_async_call_filter(self):
         class AsyncFK(ForeignKeyFilter):

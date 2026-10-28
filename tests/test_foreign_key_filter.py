@@ -330,6 +330,25 @@ class TestForeignKeyFilter(ParametrizedTestCase, TestCase):
 
         assert filter_instance.title == "Fixed title"
 
+    def test_title_is_the_fields_as_in_django(self):
+        """The field's verbose name, as Django's RelatedFieldListFilter: a
+        filter of ``Book.author`` is "author", not "authors"."""
+        request = RequestFactory().get("/admin/")
+        model_admin = admin.site._registry[Book]
+
+        class CountryFilter(ForeignKeyFilter):
+            parameter_name = "author__country"
+
+        class BooksFilter(ForeignKeyFilter):
+            parameter_name = "books"  # A reverse relation: no verbose name.
+
+        assert AuthorFilter(request, {}, Book, model_admin).title == "author"
+        assert CountryFilter(request, {}, Book, model_admin).title == "country"
+        books = BooksFilter(request, {}, Author, admin.site._registry[Author])
+        assert books.title == "book"
+        # No such field (an explicit model): the model's.
+        assert MissingFieldFilter(request, {}, Book, model_admin).title == "author"
+
     def test_explicit_nullable_skips_field_inference(self):
         request = RequestFactory().get("/admin/")
         filter_instance = ExplicitNullableAuthorFilter(

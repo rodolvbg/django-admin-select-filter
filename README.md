@@ -131,7 +131,8 @@ parameter_name="country"))` reads `?country=3`.
 ### Shared options
 
 Both filters share the same options: `filter_only_used_values`, `async_call`,
-`searchable`, `nullable`, `null_label` and `title`. Both also support a nested lookup for
+`searchable`, `nullable`, `null_label` and `title` (by default, as Django's
+own filters, the field's verbose name). Both also support a nested lookup for
 `parameter_name` (e.g. `"author__status"`), resolving the field — and, for
 `ForeignKeyFilter`, the `model` — by walking each `__`-separated relation in
 turn, forward or reverse.
