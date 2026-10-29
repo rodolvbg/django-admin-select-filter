@@ -145,7 +145,14 @@ class Select2FilterOptionsView(View):
         q = request.GET.get("q", "")
         options = filter_instance.get_async_options(request, q)
         return JsonResponse(
-            {"results": [{"id": value, "text": text} for value, text in options]}
+            {
+                "results": [
+                    # Its data and template's HTML (get_option_data(),
+                    # option_template), those it has.
+                    {"id": value, "text": text, **filter_instance.option_extra(value)}
+                    for value, text in options
+                ]
+            }
         )
 
     def _has_view_permission(

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from django.contrib.admin.filters import SimpleListFilter
 from django.db import models
 from django.forms import Media
+from django.template.loader import render_to_string
 from django.templatetags.static import static
 from django.urls import reverse
 from django.utils.safestring import mark_safe
@@ -123,6 +124,45 @@ class SelectFilterFeature(SimpleListFilter):
     ) -> Choices:
         """Return every available option as ``(key, label)`` string pairs."""
         raise NotImplementedError
+
+    #: A template for each option (``value``, ``label``, ``obj``, ``data`` and
+    #: ``filter``), shown as it renders in the list and as the selection;
+    #: none: its label.
+    option_template: ClassVar[str | None] = None
+
+    def get_option_data(
+        self, value: str, label: str, obj: Any = None
+    ) -> dict[str, Any] | None:
+        """More of an option, for the page: anything JSON can carry, the
+        package doesn't read it (``obj``: a ``ForeignKeyFilter``'s object).
+        None: nothing more."""
+        return None
+
+    def _remember_option(self, value: str, label: str, obj: Any = None) -> None:
+        """Keep an option's data (``get_option_data()``) and its template's
+        HTML (``option_template``), for its ``<option>`` and its API result."""
+        extra: dict[str, Any] = {}
+        data = self.get_option_data(value, label, obj)
+        if data:
+            extra["data"] = data
+        if self.option_template:
+            extra["html"] = render_to_string(
+                self.option_template,
+                {
+                    "filter": self,
+                    "value": value,
+                    "label": label,
+                    "obj": obj,
+                    "data": data or {},
+                },
+                request=getattr(self, "request", None),
+            )
+        if extra:
+            self.__dict__.setdefault("_option_extras", {})[value] = extra
+
+    def option_extra(self, value: str) -> dict[str, Any]:
+        """An option's ``data`` and ``html``, those it has."""
+        return dict(self.__dict__.get("_option_extras", {}).get(str(value), {}))
 
     def _selected_option_items(self) -> Choices:
         """Return only the currently selected options, as ``(key, label)`` pairs."""

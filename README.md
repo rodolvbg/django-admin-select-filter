@@ -187,6 +187,45 @@ Selected values are joined in the query string with `multiple_separator`
 option is dropped in this mode — clearing every selected chip already means
 no filter.
 
+### More of each option
+
+`get_option_data(value, label, obj=None)` gives each option anything more
+JSON can carry — the package doesn't read it, the page does (`obj`: a
+`ForeignKeyFilter`'s object):
+
+```python
+class ProfessionalFilter(ForeignKeyFilter):
+    parameter_name = "professional"
+    option_template = "agenda/professional_option.html"  # optional
+
+    def get_option_data(self, value, label, obj=None):
+        return {"specialty": obj.specialty, "pending": obj.pending_count}
+```
+
+- **`option_template`** renders each option (`value`, `label`, `obj`,
+  `data` and `filter` in its context), shown as it renders in the list and
+  as the selection, without any JavaScript; the search still matches its
+  label. Escaped as any template, it's the server's HTML.
+- **On the page**, each option has them: an `<option>`'s `data-option`
+  (`{"data": …, "html": …}`), an async result's `data` and `html` (not with
+  `admin_autocomplete`, whose endpoint is the admin's).
+  `djangoAdminSelectFilter.optionOf(item)` reads them from either (a
+  Select2 item), for your own rendering:
+
+```js
+djangoAdminSelectFilter.register({
+    appliesTo: (select) => select.dataset.parameterName === "professional",
+    extendOptions: (select, options) => {
+        // Any of Select2's options.
+        options.templateResult = (item) =>
+            `${item.text} (${djangoAdminSelectFilter.optionOf(item).data.pending ?? 0})`;
+    },
+});
+```
+
+  A script of yours that runs before the filters' (an admin's `Media`)
+  may also push onto `window.djangoAdminSelectFilterPlugins`, an array.
+
 ### Each feature, a mixin
 
 `BaseSelectFilter` (and so both filters) is the sum of one mixin per

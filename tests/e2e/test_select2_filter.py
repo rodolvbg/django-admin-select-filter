@@ -1,4 +1,5 @@
 import re
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
@@ -11,6 +12,7 @@ from playwright.sync_api import (
     sync_playwright,
 )
 
+from tests.testapp.admin import AsyncAuthorFilter, AuthorFilter
 from tests.testapp.models import Author, Book
 
 
@@ -89,6 +91,33 @@ class SelectFilterTests(StaticLiveServerTestCase):
         rows = self.page.locator("#result_list tbody tr")
         expect(rows).to_have_count(1)
         expect(rows).to_contain_text("Harry Potter")
+
+    def test_an_option_template_in_the_list_and_as_the_selection(self):
+        with patch.object(AuthorFilter, "option_template", "testapp/option.html"):
+            self.page.goto(f"{self.live_server_url}/e2e-admin/testapp/book/")
+            self.page.locator(
+                "select.django-admin-select-filter + span .select2-selection"
+            ).click()
+            option = self.page.locator(".select2-results__option b", has_text="Rowling")
+            expect(option).to_be_visible()
+            option.click()
+            expect(self.page).to_have_url(re.compile(r"author="))
+            expect(
+                self.page.locator(".select2-selection__rendered b", has_text="Rowling")
+            ).to_be_visible()
+
+    def test_an_option_template_over_ajax(self):
+        with patch.object(AsyncAuthorFilter, "option_template", "testapp/option.html"):
+            self.page.goto(f"{self.live_server_url}/admin/testapp/book/")
+            self.page.locator(
+                "select.django-admin-select-filter"
+                '[data-async-call="true"][data-parameter-name="author"]'
+            ).locator("xpath=following-sibling::span[1]").locator(
+                ".select2-selection"
+            ).click()
+            expect(
+                self.page.locator(".select2-results__option b", has_text="Tolkien")
+            ).to_be_visible()
 
 
 class SpanishSelectFilterTests(SelectFilterTests):

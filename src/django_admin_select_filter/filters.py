@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import functools
+import json
 from typing import TYPE_CHECKING
 
 from django.apps import apps
@@ -219,7 +220,15 @@ class BaseSelectFilter(
         for index, choice in enumerate(super().choices(changelist)):
             key = "" if index == 0 else str(self.lookup_choices[index - 1][0])
             selected = not selected_values if index == 0 else key in selected_values
-            yield {**choice, "key": key, "selected": selected}
+            # Its data and template (get_option_data(), option_template).
+            extra = self.option_extra(key) if index else {}
+            yield {
+                **choice,
+                "key": key,
+                "selected": selected,
+                "option": extra,
+                "option_json": json.dumps(extra) if extra else "",
+            }
 
     def lookups(
         self,
@@ -380,10 +389,12 @@ class ForeignKeyFilter(BaseSelectFilter):
         q: str = "",
     ) -> Choices:
         """Return every available option as ``(key, label)`` string pairs."""
-        return [
-            (str(instance.pk), str(instance))
-            for instance in self.get_options(request=request, q=q)
-        ]
+        items = []
+        for instance in self.get_options(request=request, q=q):
+            item = (str(instance.pk), str(instance))
+            self._remember_option(*item, obj=instance)
+            items.append(item)
+        return items
 
     def _selected_option_items(self) -> Choices:
         """Return only the currently selected options, as ``(key, label)`` pairs."""
@@ -396,7 +407,12 @@ class ForeignKeyFilter(BaseSelectFilter):
             if selected_pks
             else self.model._default_manager.none()
         )
-        return [(str(instance.pk), str(instance)) for instance in selected_instances]
+        items = []
+        for instance in selected_instances:
+            item = (str(instance.pk), str(instance))
+            self._remember_option(*item, obj=instance)
+            items.append(item)
+        return items
 
 
 class ChoiceFilter(BaseSelectFilter):
@@ -480,10 +496,13 @@ class ChoiceFilter(BaseSelectFilter):
         q: str = "",
     ) -> Choices:
         """Return every available option as ``(key, label)`` string pairs."""
-        return [
+        items = [
             (str(value), label)
             for value, label in self.get_options(request=request, q=q)
         ]
+        for item in items:
+            self._remember_option(*item)
+        return items
 
     def _selected_option_items(self) -> Choices:
         """Return only the currently selected options, as ``(key, label)`` pairs."""
@@ -492,11 +511,14 @@ class ChoiceFilter(BaseSelectFilter):
             value for value in self.selected_values() if value != self.null_value
         ]
         option_by_key = {str(value): label for value, label in self.options}
-        return [
+        items = [
             (value, option_by_key[value])
             for value in selected_values
             if value in option_by_key
         ]
+        for item in items:
+            self._remember_option(*item)
+        return items
 
 
 @functools.cache

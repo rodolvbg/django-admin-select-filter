@@ -16,8 +16,41 @@ function loadScript(source) {
 // on the same page may request the same module. They don't import this file:
 // a bare specifier would need an inline <script type="importmap">, which a
 // Content Security Policy without 'unsafe-inline' (or a nonce) blocks.
+//
+// The page's own plugins, the same way: `window.djangoAdminSelectFilterPlugins`
+// (an array, made before this runs, or pushed onto after), or
+// `djangoAdminSelectFilter.register(plugin)`. A plugin is `{appliesTo(select),
+// extendOptions(select, options), bindEvents($select, select, options)}`:
+// `extendOptions` may set any of Select2's options (`templateResult`…).
 window.__djangoAdminSelectFilterPlugins ??= [];
 const plugins = window.__djangoAdminSelectFilterPlugins;
+const own = window.djangoAdminSelectFilterPlugins;
+if (Array.isArray(own) && own !== plugins) plugins.push(...own);
+window.djangoAdminSelectFilterPlugins = plugins;
+
+/** An option's `data` (the filter's `get_option_data()`) and `html` (its
+ * `option_template`): of an API result, or of its `<option>`. */
+function optionOf(item) {
+	let option = {};
+	if (item && ("data" in item || "html" in item)) {
+		option = item;
+	} else if (item?.element?.dataset?.option) {
+		try {
+			option = JSON.parse(item.element.dataset.option);
+		} catch {
+			option = {};
+		}
+	}
+	return { data: option.data ?? {}, html: option.html ?? "" };
+}
+
+window.djangoAdminSelectFilter = {
+	plugins,
+	register(plugin) {
+		plugins.push(plugin);
+	},
+	optionOf,
+};
 
 // Select2's translation files register themselves on the global `jQuery`,
 // so they load while it points at the jQuery Select2 is attached to.
@@ -92,6 +125,16 @@ async function initializeFilters() {
 		const trap = element.closest(FOCUS_TRAP);
 		if (trap) {
 			options.dropdownParent = $(trap);
+		}
+		// Its options' template (`option_template`), rendered by the server:
+		// in the list, and as the selection.
+		if (element.dataset.optionTemplate === "true") {
+			const render = (item) => {
+				const { html } = optionOf(item);
+				return html ? $("<span>").html(html) : item.text;
+			};
+			options.templateResult = render;
+			options.templateSelection = render;
 		}
 		for (const plugin of plugins) {
 			if (plugin.appliesTo(element)) plugin.extendOptions?.(element, options);

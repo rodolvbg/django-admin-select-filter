@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `get_option_data(value, label, obj=None)`: anything more of each option
+  (JSON), for the page — on its `<option>` (`data-option`) and in the async
+  results (`data`). `option_template`: a template for each option, shown
+  in the list and as the selection, without JavaScript (`html`).
+- A public JavaScript API: `djangoAdminSelectFilter.register(plugin)` (or
+  `window.djangoAdminSelectFilterPlugins`), whose `extendOptions` may set
+  any of Select2's options; `djangoAdminSelectFilter.optionOf(item)`, an
+  option's `data` and `html`.
+
 ## [0.1.6] - 2026-10-28
 
 ### Fixed
