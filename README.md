@@ -225,6 +225,19 @@ djangoAdminSelectFilter.register({
 
   A script of yours that runs before the filters' (an admin's `Media`)
   may also push onto `window.djangoAdminSelectFilterPlugins`, an array.
+- **With `multiple = True`**, each selected value's chip is its selection
+  too: `option_template` shows in it, and Select2's
+  `templateSelection(item, container)` has the chip itself (`container`)
+  for its own look — in the option's color, say — both when chosen and
+  after the page reloads with it:
+
+```js
+options.templateSelection = (item, container) => {
+    const { data } = djangoAdminSelectFilter.optionOf(item);
+    if (data.color) container.css("background-color", data.color);
+    return item.text;
+};
+```
 
 ### Each feature, a mixin
 

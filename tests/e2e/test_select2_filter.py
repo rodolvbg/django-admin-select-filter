@@ -12,7 +12,12 @@ from playwright.sync_api import (
     sync_playwright,
 )
 
-from tests.testapp.admin import AsyncAuthorFilter, AuthorFilter
+from tests.testapp.admin import (
+    AsyncAuthorFilter,
+    AuthorFilter,
+    E2EBookAdmin,
+    MultipleAuthorFilter,
+)
 from tests.testapp.models import Author, Book
 
 
@@ -118,6 +123,65 @@ class SelectFilterTests(StaticLiveServerTestCase):
             expect(
                 self.page.locator(".select2-results__option b", has_text="Tolkien")
             ).to_be_visible()
+
+
+class MultipleOptionDataTests(SelectFilterTests):
+    """A multiple filter's chips: its template, and the page's own look."""
+
+    def setUp(self):
+        super().setUp()
+        patcher = patch.object(E2EBookAdmin, "list_filter", [MultipleAuthorFilter])
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def open_and_choose(self, name):
+        self.page.goto(f"{self.live_server_url}/e2e-admin/testapp/book/")
+        self.page.locator(
+            "select.django-admin-select-filter + span .select2-selection"
+        ).click()
+        self.page.locator(".select2-results__option", has_text=name).click()
+
+    def test_its_template_in_each_chip(self):
+        with patch.object(
+            MultipleAuthorFilter, "option_template", "testapp/option.html"
+        ):
+            self.open_and_choose("Rowling")
+            chip = self.page.locator(".select2-selection__choice b", has_text="Rowling")
+            expect(chip).to_be_visible()
+            self.page.keyboard.press("Escape")  # Closed: filtered by it.
+            expect(self.page).to_have_url(re.compile(r"author="))
+            expect(chip).to_be_visible()  # And after, from its <option>.
+
+    def test_the_pages_own_look_of_each_chip(self):
+        def color(self, value, label, obj=None):
+            return {"color": "rgb(255, 0, 0)"}
+
+        # The page's plugin: each chip in its option's color.
+        self.page.add_init_script(
+            """(window.djangoAdminSelectFilterPlugins ??= []).push({
+                appliesTo: () => true,
+                extendOptions: (select, options) => {
+                    options.templateSelection = (item, container) => {
+                        const { data } = window.djangoAdminSelectFilter.optionOf(item);
+                        if (data.color) container.css("background-color", data.color);
+                        return item.text;
+                    };
+                },
+            });"""
+        )
+        with patch.object(MultipleAuthorFilter, "get_option_data", color):
+            self.open_and_choose("Rowling")
+            chip = self.page.locator(".select2-selection__choice", has_text="Rowling")
+            expect(chip).to_have_css("background-color", "rgb(255, 0, 0)")
+            self.page.keyboard.press("Escape")
+            expect(self.page).to_have_url(re.compile(r"author="))
+            expect(chip).to_have_css("background-color", "rgb(255, 0, 0)")
+
+    # The others: a single filter's.
+    test_sync_filter_navigates_and_filters_results = None  # type: ignore[assignment]
+    test_async_filter_loads_options_over_ajax_and_filters = None  # type: ignore[assignment]
+    test_an_option_template_in_the_list_and_as_the_selection = None  # type: ignore[assignment]
+    test_an_option_template_over_ajax = None  # type: ignore[assignment]
 
 
 class SpanishSelectFilterTests(SelectFilterTests):
