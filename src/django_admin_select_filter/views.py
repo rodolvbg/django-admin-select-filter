@@ -149,7 +149,11 @@ class Select2FilterOptionsView(View):
                 "results": [
                     # Its data and template's HTML (get_option_data(),
                     # option_template), those it has.
-                    {"id": value, "text": text, **filter_instance.option_extra(value)}
+                    {
+                        "id": value,
+                        "text": text,
+                        **filter_instance.option_extra(value, text),
+                    }
                     for value, text in options
                 ]
             }

@@ -139,3 +139,28 @@ class TestOptionData(TestCase):
         request = RequestFactory().get("/")
         spec = AuthorFilter(request, {}, Book, admin.site._registry[Book])
         assert spec.option_extra("999") == {}
+
+    def test_with_its_count_when_the_changelist_shows_them(self):
+        Book.objects.create(title="No one's", genre="fiction")
+        with patch.object(AuthorFilter, "option_template", "testapp/option.html"):
+            page = self.client.get(
+                "/e2e-admin/testapp/book/", {"_facets": "True"}
+            ).content.decode()
+        options = self.options(page)
+        assert options[str(self.rowling.pk)]["html"].startswith("<b>Rowling (1)</b>")
+        # The empty value's too, without its object.
+        assert options["__null__"] == {"html": "<b>- (1)</b>\n"}
+        url = reverse("admin_select_filter:options")
+        query = {
+            "app_label": "testapp",
+            "model_name": "book",
+            "parameter_name": "author",
+            "facets": "true",
+        }
+        with patch.object(AsyncAuthorFilter, "option_template", "testapp/option.html"):
+            results = self.client.get(url, query).json()["results"]
+        assert {r["id"]: r.get("html") for r in results} == {
+            "__all__": None,
+            str(self.rowling.pk): f"<b>Rowling (1)</b> · {self.rowling.pk}\n",
+            "__null__": "<b>- (1)</b>\n",
+        }
