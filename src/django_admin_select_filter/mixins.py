@@ -7,7 +7,7 @@ puts them together; each one's options stay on it as they always were
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from django.contrib.admin.filters import SimpleListFilter
 from django.db import models
@@ -146,23 +146,42 @@ class SelectFilterFeature(SimpleListFilter):
         if data:
             extra["data"] = data
         if self.option_template:
-            extra["html"] = render_to_string(
-                self.option_template,
-                {
-                    "filter": self,
-                    "value": value,
-                    "label": label,
-                    "obj": obj,
-                    "data": data or {},
-                },
-                request=getattr(self, "request", None),
+            extra["html"] = self._render_option(value, label, obj, data)
+            # To render it again with another label (its count).
+            self.__dict__.setdefault("_option_contexts", {})[value] = (
+                label,
+                obj,
+                data,
             )
         if extra:
             self.__dict__.setdefault("_option_extras", {})[value] = extra
 
-    def option_extra(self, value: str) -> dict[str, Any]:
-        """An option's ``data`` and ``html``, those it has."""
-        return dict(self.__dict__.get("_option_extras", {}).get(str(value), {}))
+    def _render_option(
+        self, value: str, label: str, obj: Any, data: dict[str, Any] | None
+    ) -> str:
+        """An option's ``option_template``."""
+        return render_to_string(
+            cast("str", self.option_template),
+            {
+                "filter": self,
+                "value": value,
+                "label": label,
+                "obj": obj,
+                "data": data or {},
+            },
+            request=getattr(self, "request", None),
+        )
+
+    def option_extra(self, value: str, label: str | None = None) -> dict[str, Any]:
+        """An option's ``data`` and ``html``, those it has; with ``label``
+        (its text, with its count when the changelist shows them), its
+        template rendered with it."""
+        value = str(value)
+        extra = dict(self.__dict__.get("_option_extras", {}).get(value, {}))
+        context = self.__dict__.get("_option_contexts", {}).get(value)
+        if label is not None and context is not None and str(label) != context[0]:
+            extra["html"] = self._render_option(value, str(label), *context[1:])
+        return extra
 
     def _selected_option_items(self) -> Choices:
         """Return only the currently selected options, as ``(key, label)`` pairs."""
@@ -279,14 +298,21 @@ class NullOptionMixin(SelectFilterFeature):
     def initial_options(self, request: HttpRequest) -> Choices:
         options = super().initial_options(request)
         if self.has_null_option:
-            options.append((self.null_value, self.get_null_label(request)))
+            options.append(self._null_option(request))
         return options
 
     def extend_async_options(self, request: HttpRequest, options: Choices) -> Choices:
         options = super().extend_async_options(request, options)
         if self._has_null_option():
-            options.append((self.null_value, self.get_null_label(request)))
+            options.append(self._null_option(request))
         return options
+
+    def _null_option(self, request: HttpRequest | None) -> tuple[str, str]:
+        """The empty-value option, with its data and template (``obj``:
+        None), as the others."""
+        option = (str(self.null_value), self.get_null_label(request))
+        self._remember_option(*option)
+        return option
 
 
 class MultipleValuesMixin(SelectFilterFeature):

@@ -1,5 +1,19 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+
+- `option_template` shows the option's count when the changelist shows
+  them ("Show counts"): its `label` has it, on the page and in the async
+  results, as a plain option's text.
+
+### Changed
+
+- The empty-value option has its `get_option_data()` and `option_template`
+  too, with `obj` None: a `get_option_data()` that reads `obj` must allow
+  for it.
+
 ## [0.1.7] - 2026-10-29
 
 ### Added

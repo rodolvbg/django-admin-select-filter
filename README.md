@@ -191,7 +191,7 @@ no filter.
 
 `get_option_data(value, label, obj=None)` gives each option anything more
 JSON can carry — the package doesn't read it, the page does (`obj`: a
-`ForeignKeyFilter`'s object):
+`ForeignKeyFilter`'s object; None for the empty-value option):
 
 ```python
 class ProfessionalFilter(ForeignKeyFilter):
@@ -205,7 +205,9 @@ class ProfessionalFilter(ForeignKeyFilter):
 - **`option_template`** renders each option (`value`, `label`, `obj`,
   `data` and `filter` in its context), shown as it renders in the list and
   as the selection, without any JavaScript; the search still matches its
-  label. Escaped as any template, it's the server's HTML.
+  label. Escaped as any template, it's the server's HTML. With the
+  changelist's counts shown ("Show counts"), its `label` has its count, as
+  a plain option's text.
 - **On the page**, each option has them: an `<option>`'s `data-option`
   (`{"data": …, "html": …}`), an async result's `data` and `html` (not with
   `admin_autocomplete`, whose endpoint is the admin's).

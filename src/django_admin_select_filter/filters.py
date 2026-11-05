@@ -221,7 +221,7 @@ class BaseSelectFilter(
             key = "" if index == 0 else str(self.lookup_choices[index - 1][0])
             selected = not selected_values if index == 0 else key in selected_values
             # Its data and template (get_option_data(), option_template).
-            extra = self.option_extra(key) if index else {}
+            extra = self.option_extra(key, str(choice["display"])) if index else {}
             yield {
                 **choice,
                 "key": key,
