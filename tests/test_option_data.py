@@ -3,8 +3,10 @@
 import html
 import json
 import re
+from unittest import skipIf
 from unittest.mock import patch
 
+import django
 from django.contrib import admin
 from django.contrib.auth.models import User
 from django.template.loader import render_to_string
@@ -140,6 +142,7 @@ class TestOptionData(TestCase):
         spec = AuthorFilter(request, {}, Book, admin.site._registry[Book])
         assert spec.option_extra("999") == {}
 
+    @skipIf(django.VERSION < (5, 0), "Django 5.0+ facets")
     def test_with_its_count_when_the_changelist_shows_them(self):
         Book.objects.create(title="No one's", genre="fiction")
         with patch.object(AuthorFilter, "option_template", "testapp/option.html"):
@@ -150,6 +153,9 @@ class TestOptionData(TestCase):
         assert options[str(self.rowling.pk)]["html"].startswith("<b>Rowling (1)</b>")
         # The empty value's too, without its object.
         assert options["__null__"] == {"html": "<b>- (1)</b>\n"}
+
+    def test_with_its_count_in_the_async_results(self):
+        Book.objects.create(title="No one's", genre="fiction")
         url = reverse("admin_select_filter:options")
         query = {
             "app_label": "testapp",
