@@ -37,7 +37,9 @@ def options(html):
     """Its options' values, and which are selected."""
     return [
         (key, " selected" if re.search(r"\sselected\s", rest) else "")
-        for key, rest in re.findall(r'<option\s+data-key="([^"]*)"(.*?)>', html, re.S)
+        for key, rest in re.findall(
+            r'<option\s+data-key="([^"]*)"(.*?)>', html, re.DOTALL
+        )
     ]
 
 
@@ -95,9 +97,7 @@ class TestFilter(TestCase):
 
     def build(self, filter_class, params):
         request = RequestFactory().get("/")
-        return filter_class(
-            request, params, Book, i18n_admin_site._registry[Book]
-        )
+        return filter_class(request, params, Book, i18n_admin_site._registry[Book])
 
     def test_several_values(self):
         Book.objects.create(title="Ficciones", genre="fiction")
@@ -147,10 +147,14 @@ class TestLinks:
             (TranslatedGenreFilter, "?genre=poesia", ["poetry"]),
             (TranslatedGenreFilter, "?genre=nonfiction", ["nonfiction"]),
             (TranslatedGenreFilter, "?other=1", []),
-            (MultipleTranslatedGenreFilter, "?genero=ficcion,,__null__", [
-                "fiction",
-                "__null__",
-            ]),
+            (
+                MultipleTranslatedGenreFilter,
+                "?genero=ficcion,,__null__",
+                [
+                    "fiction",
+                    "__null__",
+                ],
+            ),
             (GenreFilter, "?genre=poetry", ["poetry"]),
         ],
     )
