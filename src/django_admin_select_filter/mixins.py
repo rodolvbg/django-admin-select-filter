@@ -9,14 +9,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
+from django.conf import settings
 from django.contrib.admin.filters import SimpleListFilter
+from django.core.exceptions import ImproperlyConfigured
 from django.db import models
 from django.forms import Media
 from django.template.loader import render_to_string
 from django.templatetags.static import static
 from django.urls import reverse
+from django.utils.functional import Promise
 from django.utils.safestring import mark_safe
-from django.utils.translation import gettext
+from django.utils.translation import gettext, override
 
 if TYPE_CHECKING:
     from typing import Any, ClassVar
@@ -31,6 +34,20 @@ if TYPE_CHECKING:
 # share one source of truth without a circular import — urls.py already
 # depends on views.py, which depends on the filters.
 ASYNC_CALL_URL_NAME = "options"
+
+
+def translations(text: Any) -> dict[str, str | None]:
+    """``text`` in each language: ``{text: language}``, the active one's
+    first (``None``), then each of ``LANGUAGES``'s; a plain ``str``: itself.
+    For what is translated (``gettext_lazy``) but must be found in any
+    language: a link in another's, a language switched."""
+    if not isinstance(text, Promise):
+        return {str(text): None}
+    names: dict[str, str | None] = {str(text): None}
+    for code, _name in settings.LANGUAGES:
+        with override(code):
+            names.setdefault(str(text), code)
+    return names
 
 
 def _csp_nonce(request: HttpRequest | None) -> str | None:
@@ -91,8 +108,11 @@ class SelectFilterFeature(SimpleListFilter):
     all_value: ClassVar[str] = "__all__"
     null_value: ClassVar[str] = "__null__"
     #: The query string's parameter (``?author=3``): it names the filter in
-    #: the URL, and the async options' endpoint finds it by it.
-    parameter_name: str | None = None
+    #: the URL, and the async options' endpoint finds it by it. Translatable
+    #: (``pgettext_lazy("filter", "author")``: ``?autor=3`` in Spanish), with
+    #: ``field_name``: the active language's, and any other's still works.
+    #: (``Any``: a ``str``, else lazy; a ``str`` once the filter is made.)
+    parameter_name: Any = None
     #: The lookup it filters by, when it isn't ``parameter_name``
     #: (``"author__country"`` for ``?country=3``).
     field_name: str | None = None
@@ -108,6 +128,62 @@ class SelectFilterFeature(SimpleListFilter):
     def field_lookup(self) -> str | None:
         """What it filters by: ``field_name``, else ``parameter_name``."""
         return self.field_name or self.parameter_name
+
+    def _bind_parameter_name(self, params: dict[str, Any]) -> None:
+        """A translated ``parameter_name``: the active language's, for the
+        request (Django's changelist reads it as a ``str``); the URL's in
+        another language, as if in this one (a link, a language switched)."""
+        name = type(self).parameter_name
+        if not isinstance(name, Promise):
+            return
+        if not self.field_name:
+            raise ImproperlyConfigured(
+                f"{type(self).__name__}.parameter_name is translated: set its "
+                "field_name, the lookup it filters by."
+            )
+        self.parameter_name = str(name)
+        for other in translations(name):
+            if other != self.parameter_name and other in params:
+                params.setdefault(self.parameter_name, params.pop(other))
+
+    @classmethod
+    def url_value(cls, value: Any) -> str:
+        """An option's value in the URL, by its own (``None``: the empty
+        value's)."""
+        return cls.null_value if value is None else str(value)
+
+    @classmethod
+    def own_value(cls, url_value: str) -> str:
+        """An option's own value, by its value in the URL."""
+        return url_value
+
+    @classmethod
+    def query(cls, *values: Any) -> dict[str, str]:
+        """The URL's query that chooses ``values`` (their own; ``None``: the
+        empty value), in the active language: for a link
+        (``f"{changelist}?{urlencode(StatusFilter.query("confirmed"))}"``)."""
+        separator = getattr(cls, "multiple_separator", ",")
+        return {str(cls.parameter_name): separator.join(map(cls.url_value, values))}
+
+    @classmethod
+    def selected(cls, request: HttpRequest) -> list[str]:
+        """The own values chosen in ``request``'s URL, in any language;
+        without the filter at hand (a page of its own, a link of a column)."""
+        for name in translations(cls.parameter_name):
+            if value := request.GET.get(name):
+                break
+        else:
+            return []
+        values = (
+            value.split(getattr(cls, "multiple_separator", ","))
+            if getattr(cls, "multiple", False)
+            else [value]
+        )
+        return [
+            item if item == cls.null_value else cls.own_value(item)
+            for item in values
+            if item
+        ]
 
     @property
     def media(self) -> Media:

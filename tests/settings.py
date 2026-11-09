@@ -56,3 +56,6 @@ TEMPLATES = [
 ]
 
 STATIC_URL = "/static/"
+
+# Translated filters' parameters and values (tests/testapp/locale).
+LANGUAGES = [("en", "English"), ("es", "Spanish")]

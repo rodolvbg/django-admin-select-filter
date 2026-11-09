@@ -151,8 +151,50 @@ class CountryFilter(ForeignKeyFilter):
 Everything that touches the database (the lookup, the used values, the
 empty-value option, `model` and the choices' inference, the async counts)
 reads `field_name`; the URL and the async endpoint read `parameter_name`.
-A translated `parameter_name` follows the request's language, except with
-the async endpoint's `use_registry`, which keeps the one it was built in.
+
+### Translated URLs
+
+A translated `parameter_name` (lazy, with `field_name`) is the active
+language's, and any other language's of `LANGUAGES` still works: a link
+saved in another, or a language switched (`set_language` keeps the query
+string). The async endpoint finds it in any of them too, and answers in its
+page's language, even outside `i18n_patterns`.
+
+A `ChoiceFilter`'s values too, with `url_values`: each option's value in
+the URL, by its own. Its own values still work (links from before), and
+any language's:
+
+```python
+from django.utils.translation import pgettext_lazy
+
+
+class StatusFilter(ChoiceFilter):
+    parameter_name = pgettext_lazy("appointment filter", "status")
+    field_name = "status"
+    url_values = {
+        "confirmed": pgettext_lazy("appointment status", "confirmed"),
+        "cancelled": pgettext_lazy("appointment status", "cancelled"),
+    }
+```
+
+`?status=confirmed` in English, `?estado=confirmada` in Spanish. With
+mypy, django-stubs types `parameter_name` as a `str`: a lazy one needs
+`# type: ignore[assignment]`.
+
+For links and pages of your own, in the active language, by the options'
+own values:
+
+```python
+from django.utils.http import urlencode
+
+url = f"{changelist_url}?{urlencode(StatusFilter.query('confirmed'))}"
+StatusFilter.selected(request)  # ["confirmed"]: its own values in the URL
+```
+
+`query(*values)`: the URL's query that chooses them (`None`: the empty
+value; several, joined by `multiple_separator`). `selected(request)`: the
+own values chosen in a request's URL, in any language, without the filter
+at hand. `url_value(value)` and `own_value(url_value)` convert one.
 
 `theme` sets the Select2 theme; by default Select2's own, styled like the
 admin (or `admin-autocomplete` with [django-unfold](docs/themes/unfold.md)).

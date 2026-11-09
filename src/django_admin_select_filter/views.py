@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import functools
+from contextlib import nullcontext
 from typing import TYPE_CHECKING
 
 from django.apps import apps
 from django.contrib.admin.sites import AdminSite, all_sites
 from django.http import JsonResponse
-from django.utils.translation import gettext
+from django.utils.translation import gettext, override
 from django.views import View
 
 from django_admin_select_filter.filters import BaseSelectFilter
+from django_admin_select_filter.mixins import translations
 
 if TYPE_CHECKING:
     from typing import Any, ClassVar
@@ -73,7 +75,6 @@ class Select2FilterOptionsView(View):
                         continue
                     if not (filter_class.async_call and filter_class.parameter_name):
                         continue
-                    parameter_name = filter_class.parameter_name
                     app_label = model._meta.app_label
                     model_name = model._meta.model_name
                     assert app_label is not None
@@ -83,7 +84,9 @@ class Select2FilterOptionsView(View):
                         .setdefault(app_label, {})
                         .setdefault(model_name, {})
                     )
-                    parameter_map[parameter_name] = filter_class
+                    # In each language, when it's translated.
+                    for parameter_name in translations(filter_class.parameter_name):
+                        parameter_map[parameter_name] = filter_class
         return registry
 
     def get(self, request: HttpRequest) -> JsonResponse:
@@ -140,24 +143,28 @@ class Select2FilterOptionsView(View):
         )
         assert filter_class is not None
 
-        params = {key: request.GET.getlist(key) for key in request.GET}
-        filter_instance = filter_class(request, params, model, model_admin)
-        q = request.GET.get("q", "")
-        options = filter_instance.get_async_options(request, q)
-        return JsonResponse(
-            {
-                "results": [
-                    # Its data and template's HTML (get_option_data(),
-                    # option_template), those it has.
-                    {
-                        "id": value,
-                        "text": text,
-                        **filter_instance.option_extra(value, text),
-                    }
-                    for value, text in options
-                ]
-            }
-        )
+        # A translated parameter's: in its page's language (this endpoint
+        # may be outside i18n_patterns, in another).
+        language = translations(filter_class.parameter_name).get(parameter_name)
+        with override(language) if language else nullcontext():
+            params = {key: request.GET.getlist(key) for key in request.GET}
+            filter_instance = filter_class(request, params, model, model_admin)
+            q = request.GET.get("q", "")
+            options = filter_instance.get_async_options(request, q)
+            return JsonResponse(
+                {
+                    "results": [
+                        # Its data and template's HTML (get_option_data(),
+                        # option_template), those it has.
+                        {
+                            "id": value,
+                            "text": text,
+                            **filter_instance.option_extra(value, text),
+                        }
+                        for value, text in options
+                    ]
+                }
+            )
 
     def _has_view_permission(
         self,
@@ -234,7 +241,8 @@ class Select2FilterOptionsView(View):
                 isinstance(filter_class, type)
                 and issubclass(filter_class, BaseSelectFilter)
                 and filter_class.async_call
-                and filter_class.parameter_name == parameter_name
+                and filter_class.parameter_name
+                and parameter_name in translations(filter_class.parameter_name)
             ):
                 return filter_class
         return None

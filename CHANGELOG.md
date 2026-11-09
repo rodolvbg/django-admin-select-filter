@@ -1,5 +1,20 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- A translated `parameter_name` (lazy, with `field_name`) is understood in
+  any language of `LANGUAGES`: a link in another, a language switched. The
+  async endpoint finds it in any of them (`use_registry` too) and answers
+  in its page's language.
+- `ChoiceFilter.url_values`: each option's value in the URL, by its own,
+  translatable (`?estado=confirmada`); its own values, and any language's,
+  still work.
+- `query(*values)` and `selected(request)` (and `url_value()`,
+  `own_value()`): a link's query, and the values chosen in a URL, by the
+  options' own values, without the filter at hand.
+
 ## [0.1.8] - 2026-11-05
 
 ### Fixed

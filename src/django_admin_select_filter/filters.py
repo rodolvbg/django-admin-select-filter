@@ -21,6 +21,7 @@ from django_admin_select_filter.mixins import (
     NullOptionMixin,
     SearchableMixin,
     UsedValuesMixin,
+    translations,
 )
 
 __all__ = [
@@ -32,7 +33,7 @@ __all__ = [
 ]
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Iterator, Mapping
     from typing import Any, ClassVar
 
     from django.contrib.admin import ModelAdmin
@@ -103,6 +104,7 @@ class BaseSelectFilter(
         model_admin: ModelAdmin[Any],
     ) -> None:
         """Configure the filter for an admin changelist request."""
+        self._bind_parameter_name(params)
         self.request = request
         self.model_admin = model_admin
         self.admin_app_label = admin_model._meta.app_label
@@ -290,6 +292,7 @@ class ForeignKeyFilter(BaseSelectFilter):
         model_admin: ModelAdmin[Any],
     ) -> None:
         """Configure the filter for an admin changelist request."""
+        self._bind_parameter_name(params)
         if self.model is None:
             self.model = self._resolve_model(admin_model)
         if self.model is None:
@@ -430,6 +433,11 @@ class ChoiceFilter(BaseSelectFilter):
         Explicit ``(value, label)`` pairs to offer. When left unset, options
         are read from the configured field's ``choices`` (e.g. a
         ``ChoiceField``); configuring this is required if the field has none.
+    ``url_values``
+        Each option's value in the URL, by its own, when it isn't it:
+        ``{"confirmed": pgettext_lazy("status", "confirmed")}`` (translatable:
+        ``?estado=confirmada`` in Spanish). Its own still works, and any
+        language's: links saved before, a language switched.
 
     ``all_value`` and ``null_value`` are reserved values used by the async API
     for the translated “All” option and the null option, respectively. They can
@@ -438,6 +446,49 @@ class ChoiceFilter(BaseSelectFilter):
 
     template = "admin_select_filter/filters/choice_filter.html"
     options: list[tuple[Any, str]] | None = None
+    url_values: ClassVar[Mapping[Any, Any] | None] = None
+
+    @classmethod
+    def url_value(cls, value: Any) -> str:
+        """An option's value in the URL (``url_values``'s, in the active
+        language), by its own."""
+        if value is None:
+            return cls.null_value
+        names = {str(own): url for own, url in (cls.url_values or {}).items()}
+        return str(names.get(str(value), value))
+
+    @classmethod
+    def own_value(cls, url_value: str) -> str:
+        """An option's own value, by its value in the URL in any language
+        (or its own)."""
+        for own, url in (cls.url_values or {}).items():
+            if url_value in translations(url):
+                return str(own)
+        return url_value
+
+    def selected_values(self) -> list[str]:
+        """Their values in the URL, in the active language's (a link's in
+        another's, or their own, as it)."""
+        return [
+            value if value == self.null_value else self.url_value(self.own_value(value))
+            for value in super().selected_values()
+        ]
+
+    def values_condition(self, values: list[str]) -> models.Q:
+        """By the options' own values."""
+        return super().values_condition(
+            [
+                value if value == self.null_value else self.own_value(value)
+                for value in values
+            ]
+        )
+
+    def _get_option_facet_counts(self) -> dict[str, int]:
+        """By their values in the URL."""
+        return {
+            value if value == self.null_value else self.url_value(value): count
+            for value, count in super()._get_option_facet_counts().items()
+        }
 
     def __init__(
         self,
@@ -449,6 +500,7 @@ class ChoiceFilter(BaseSelectFilter):
         """Configure the filter for an admin changelist request."""
         if self.parameter_name is None:
             raise TypeError(f"{type(self).__name__}.parameter_name must be configured")
+        self._bind_parameter_name(params)
 
         field = self._resolve_field(admin_model)
         if self.options is None:
@@ -495,9 +547,10 @@ class ChoiceFilter(BaseSelectFilter):
         request: HttpRequest | None = None,
         q: str = "",
     ) -> Choices:
-        """Return every available option as ``(key, label)`` string pairs."""
+        """Return every available option as ``(key, label)`` string pairs:
+        its value in the URL (``url_values``), its label."""
         items = [
-            (str(value), label)
+            (self.url_value(value), label)
             for value, label in self.get_options(request=request, q=q)
         ]
         for item in items:
@@ -510,7 +563,7 @@ class ChoiceFilter(BaseSelectFilter):
         selected_values = [
             value for value in self.selected_values() if value != self.null_value
         ]
-        option_by_key = {str(value): label for value, label in self.options}
+        option_by_key = {self.url_value(value): label for value, label in self.options}
         items = [
             (value, option_by_key[value])
             for value in selected_values

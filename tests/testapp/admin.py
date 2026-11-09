@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.utils.translation import pgettext_lazy
 
 from django_admin_select_filter.filters import (
     ChoiceFilter,
@@ -157,3 +158,52 @@ class E2EBookAdmin(admin.ModelAdmin[Book]):
 @admin.register(Country, site=e2e_admin_site)
 class E2ECountryAdmin(admin.ModelAdmin[Country]):
     list_filter = [AsyncCountryNameFilter]
+
+
+# Translated parameters and values (?genero=ficcion in Spanish), on a site of
+# their own.
+class TranslatedGenreFilter(ChoiceFilter):
+    parameter_name = pgettext_lazy("filter", "genre")  # type: ignore[assignment]
+    field_name = "genre"
+    filter_only_used_values = False
+    url_values = {
+        "fiction": pgettext_lazy("genre", "fiction"),
+        "poetry": pgettext_lazy("genre", "poetry"),
+    }
+
+
+class AsyncTranslatedGenreFilter(TranslatedGenreFilter):
+    """Of the authors, by their books'."""
+
+    field_name = "books__genre"
+    async_call = True
+
+
+class MultipleTranslatedGenreFilter(TranslatedGenreFilter):
+    multiple = True
+
+
+class TranslatedAuthorFilter(ForeignKeyFilter):
+    model = Author
+    parameter_name = pgettext_lazy("filter", "author")  # type: ignore[assignment]
+    field_name = "author"
+
+
+class UnboundTranslatedFilter(ChoiceFilter):
+    """Translated, without the lookup it filters by."""
+
+    parameter_name = pgettext_lazy("filter", "genre")  # type: ignore[assignment]
+
+
+i18n_admin_site = admin.AdminSite(name="i18n_admin")
+
+
+@admin.register(Book, site=i18n_admin_site)
+class I18nBookAdmin(admin.ModelAdmin[Book]):
+    list_filter = [TranslatedGenreFilter, TranslatedAuthorFilter]
+
+
+@admin.register(Author, site=i18n_admin_site)
+class I18nAuthorAdmin(admin.ModelAdmin[Author]):
+    # Its books' genre, asynchronous.
+    list_filter = [AsyncTranslatedGenreFilter]
